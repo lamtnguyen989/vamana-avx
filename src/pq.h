@@ -13,13 +13,15 @@
 
 #include "distance.h"
 
+#define PQ_MAGIC 0x50513031u /* ASCII code for "PQ01" */
+
 typedef struct {
     float* centroids;   // Centroid data
     uint64_t hash;      // Centroid signature for versioning
     uint32_t dim;       // Dimension of search space
-    uint32_t M;
+    uint32_t M;         // Number of sub-vectors
     uint32_t sub_dim;   // Sub-dimension of the quantization encoding
-    uint32_t K;
+    uint32_t K;         // Centroids per subspace
 } PQCodebook;
 
 
@@ -69,10 +71,41 @@ static inline void pq_adc_distances(const PQCodebook* pq, float* adc_table, uint
 }
 
 // Cleanups
-static inline void pq_codebook_free(PQCodebook* pq){
+static inline void pq_codebook_free(PQCodebook* pq)
+{
     free(pq-> centroids);
     free(pq);
 }
+
+
+// Fingerprinting hash for the codebook data
+static inline uint64_t fnv1a_hash64(const void* data, size_t len, uint64_t seed) 
+{
+    // Hashing based on FNV-1a scheme: https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function 
+    uint64_t FNV_OFFSET = 0xcbf29ce484222325ULL;
+    uint64_t FNV_PRIME = 0x00000100000001b3ULL;
+
+    uint64_t hash = seed ^= FNV_OFFSET;
+    const uint8_t* p = (uint8_t*) data;
+    for (size_t j = 0; j < len; j++) {
+        hash ^= p[j];
+        hash *= FNV_PRIME;
+    }
+
+    return hash;
+}
+
+// Hashing the codebook via hashing all the data (iteratively)
+static inline uint64_t pq_codebook_hash(PQCodebook* pq)
+{
+    uint64_t hash = fnv1a_hash64(&pq->dim, sizeof(uint32_t), 0);
+    hash = fnv1a_hash64(&pq->M, sizeof(uint32_t), hash);
+    hash = fnv1a_hash64(&pq->K, sizeof(uint32_t), hash);
+    hash = fnv1a_hash64(pq->centroids, (size_t)pq->M * pq->K * pq->sub_dim * sizeof(float), hash);
+    return hash;
+}
+
+
 
 static inline int pq_codebook_save(const char* path, PQCodebook *pq) {
     // TODO
@@ -84,9 +117,5 @@ static inline int pq_codebook_load(const char* path, PQCodebook *pq) {
     return 0;
 }
 
-static inline uint64_t pq_codebook_hash(PQCodebook* pq) {
-    // TODO
-    return 0;
-}
 
 #endif /* PQ_H */
