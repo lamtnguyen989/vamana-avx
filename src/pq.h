@@ -106,14 +106,73 @@ static inline uint64_t pq_codebook_hash(PQCodebook* pq)
 }
 
 
+// Serializing PQ codebook
+static inline int pq_codebook_save(const char* path, PQCodebook *pq) 
+{
+    // Opening file for serializing codebook data
+    FILE* codebook = fopen(path, "wb");
+    if (codebook == NULL) {
+        perror("pq_codebook_save: fopen\n");
+        return -1;
+    }
 
-static inline int pq_codebook_save(const char* path, PQCodebook *pq) {
-    // TODO
+    // Writing codebook metadata to disk
+    uint32_t pq_magic = PQ_MAGIC;
+    pq->hash = pq_codebook_hash(pq);
+    fwrite(&pq_magic, sizeof(uint32_t), 1, codebook);
+    fwrite(&pq->dim, sizeof(uint32_t), 1, codebook);
+    fwrite(&pq->M, sizeof(uint32_t), 1, codebook);
+    fwrite(&pq->K, sizeof(uint32_t), 1, codebook);
+    fwrite(&pq->hash, sizeof(uint64_t), 1, codebook);
+
+    // Writing actual centroid data to disk
+    size_t n = (size_t)pq->M * pq->K * pq->sub_dim;
+    fwrite(pq->centroids, sizeof(float), n, codebook);
+    fclose(codebook);
+
     return 0;
 }
 
-static inline int pq_codebook_load(const char* path, PQCodebook *pq) {
-    // TODO
+// Loading codebook data
+static inline int pq_codebook_load(const char* path, PQCodebook *pq) 
+{
+    // Opening codebook data file
+    FILE* codebook = fopen(path, "rb");
+    if (codebook == NULL) {
+        perror("pq_codebook_load: fopen\n");
+        return -1;
+    }
+
+    // Verifying magic bytes
+    uint32_t magic;
+    if (fread(&magic, sizeof(uint32_t), 1, codebook) != 1 || magic != PQ_MAGIC) {
+        fprintf(stderr, "pq_codebook_load: bad magic in %s\n", path);
+        fclose(codebook);
+        return -1;
+    }
+
+    // Populating codebook metadata
+    if (fread(&pq->dim, sizeof(uint32_t), 1, codebook) != 1 ||
+        fread(&pq->M, sizeof(uint32_t), 1, codebook) != 1 ||
+        fread(&pq->K, sizeof(uint32_t), 1, codebook) != 1 ||
+        fread(&pq->hash, sizeof(uint64_t), 1, codebook) != 1) 
+    {
+        fprintf(stderr, "pq_codebook_load: header corrupted or not match expected format in %s\n", path);
+        fclose(codebook); 
+        return -1;
+    }
+
+    // Populating codebook data in memory
+    pq->sub_dim = pq->dim / pq->M;
+    size_t n = (size_t)pq->M * pq->K * pq->sub_dim;
+    if (fread(pq->centroids, sizeof(float), n, codebook) != n) {
+        fprintf(stderr, "pq_codebook_load: centroid data loading problem in %s\n", path);
+        fclose(codebook); 
+        free(pq->centroids); 
+        return -1;
+    }
+        fclose(codebook);
+
     return 0;
 }
 
