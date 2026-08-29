@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#define DEBUG
 #include "distance.h"
 
 int main(int argc, char** argv)

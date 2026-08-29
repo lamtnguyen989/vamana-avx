@@ -1,14 +1,13 @@
 #ifndef QUANTIZER_H
 #define QUANTIZER_H
 
-#include <cstdint>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
 #include <stdio.h>
 
-// Product Quantization implementaqtion
+// Product Quantization implementation
 #if defined(PQ_IMPLEMENTATION)
 
 typedef struct {

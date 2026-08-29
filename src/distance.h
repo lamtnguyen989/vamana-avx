@@ -26,7 +26,10 @@ static inline float l2sq_dist(const float* a, const float* b, uint32_t dim)
 // Base L2 vector distance with scalar serial execution
 static inline float l2sq_scalar(const float* a, const float* b, uint32_t dim)
 {
-    printf("Calculating serially...\n");
+    #if defined(DEBUG)
+        printf("Calculating serially...\n");
+    #endif
+
     float result = 0.0f;
     for (uint32_t k = 0; k < dim; k++) {result += square(a[k] - b[k]);}
     return result;
@@ -35,7 +38,10 @@ static inline float l2sq_scalar(const float* a, const float* b, uint32_t dim)
 // Calculating squared L2 vector distance with AVX-512
 static inline float l2sq_avx512(const float* a, const float* b, uint32_t dim)
 {
-    printf("Calculating with AVX-512...\n");
+    #if defined(DEBUG)
+        printf("Calculating with AVX-512...\n");
+    #endif
+
     __m512 accumulator = _mm512_setzero_ps();
     
     // Note 512-bits is 16 floats so jump by that amount
@@ -62,8 +68,10 @@ static inline float l2sq_avx512(const float* a, const float* b, uint32_t dim)
 // Calculating squared L2 vector distance with AVX-256
 static inline float l2sq_avx256(const float* a, const float* b, uint32_t dim)
 {
-    printf("Calculating with AVX-256...\n");
-
+    #if defined(DEBUG)
+        printf("Calculating with AVX-256...\n");
+    #endif
+    
     __m256 accumulator = _mm256_setzero_ps();
 
     // Accumulate results via 8 floats (256-bits) chunks
