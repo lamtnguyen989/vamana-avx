@@ -1,4 +1,4 @@
-CFLAGS  ?= -O3 -flto -march=native
+CFLAGS  ?= -O3 -flto -march=native -lm
 SRC_DIR = src
 BUILD_DIR = build
 

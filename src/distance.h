@@ -4,9 +4,28 @@
 #include <immintrin.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <math.h>
 
 #define square(x) ((x)*(x))
 
+// "Templating" the distance function type
+typedef float (*dist_fn_t)(const float *a, const float *b, uint32_t dim);
+
+// Metric declerations
+static inline float l2_dist(const float* a, const float* b, uint32_t dim);
+
+// Compile-time dispatch the choice of distance
+static inline dist_fn_t metric()
+{
+    #if defined (L2_IMPLEMENTATION)
+        return l2_dist;
+    #else
+        printf("No metric implementation specified! Default to L2 distance.\n");
+        return  l2_dist;
+    #endif
+}
+
+// L2 metric implementations
 static inline float l2sq_avx256(const float* a, const float* b, uint32_t dim);
 static inline float l2sq_avx512(const float* a, const float* b, uint32_t dim);
 static inline float l2sq_scalar(const float* a, const float* b, uint32_t dim);
@@ -21,6 +40,8 @@ static inline float l2sq_dist(const float* a, const float* b, uint32_t dim)
         return l2sq_scalar(a, b, dim);
     #endif
 }
+
+static inline float l2_dist(const float* a, const float* b, uint32_t dim) {return sqrtf(l2sq_dist(a, b, dim));}
 
 
 // Base L2 vector distance with scalar serial execution
@@ -71,7 +92,7 @@ static inline float l2sq_avx256(const float* a, const float* b, uint32_t dim)
     #if defined(DEBUG)
         printf("Calculating with AVX-256...\n");
     #endif
-    
+
     __m256 accumulator = _mm256_setzero_ps();
 
     // Accumulate results via 8 floats (256-bits) chunks
@@ -100,6 +121,7 @@ static inline float l2sq_avx256(const float* a, const float* b, uint32_t dim)
 
     return result;
 }
+
 
 
 #endif /* DISTANCE_H */

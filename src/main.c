@@ -4,6 +4,7 @@
 
 #define DEBUG
 #include "distance.h"
+#include "pq.h"
 
 int main(int argc, char** argv)
 {
@@ -16,8 +17,8 @@ int main(int argc, char** argv)
         b[k] = k+1;
     }
 
-    float r = l2sq_dist(a, b, dim);
-    printf("%f\n", r);
+    dist_fn_t dist = metric();
+    printf("%f\n", dist(a, b, dim));
 
     free(a);
     free(b);
