@@ -5,6 +5,7 @@
 #define DEBUG
 #include "distance.h"
 #include "pq.h"
+#include "vecfile.h"
 
 int main(int argc, char** argv)
 {
