@@ -73,8 +73,9 @@ static inline void pq_adc_distances(const PQCodebook* pq, float* adc_table, uint
 // Cleanups
 static inline void pq_codebook_free(PQCodebook* pq)
 {
+    // Note we assume codebook struct is stack-allocated except for the data
     free(pq-> centroids);
-    free(pq);
+    pq->centroids = NULL;
 }
 
 
