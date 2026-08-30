@@ -1,0 +1,14 @@
+# This is a Spack Environment file.
+#
+# It describes a set of packages to be installed, along with
+# configuration settings.
+spack:
+  # add package specs to the `specs` list
+  specs: 
+    - mpich@5.0.1 ~fortran
+  view: true
+  concretizer:
+    unify: true
+  packages:
+    tar: # The damn `tar` package just keep breaking when configure so ¯\_(ツ)_/¯
+      buildable: false
