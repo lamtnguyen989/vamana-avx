@@ -6,7 +6,7 @@ BUILD_DIR = build
 CC := mpicc
 
 # Spack information
-SPACK_ENV_NAME ?= vamana-avx
+SPACK_ENV_NAME ?= vamana-avx	# How likely is it that people use this name for one of their spack env name?
 SPACK_ENV_YAML ?= $(CURDIR)/environments/spack.yaml
 
 SHELL := /bin/bash
