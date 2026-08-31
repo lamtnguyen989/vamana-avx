@@ -3,10 +3,11 @@ CFLAGS  ?= -O3 -flto -march=native
 LINK_FLAG = -lm
 SRC_DIR = src
 BUILD_DIR = build
-CC := mpicc
+MPICC := mpicc
 
 # Spack information
-SPACK_ENV_NAME ?= vamana-avx	# How likely is it that people use this name for one of their spack env name?
+# How likely is it that people use this name for one of their spack env name?
+SPACK_ENV_NAME ?= vamana-avx
 SPACK_ENV_YAML ?= $(CURDIR)/environments/spack.yaml
 
 SHELL := /bin/bash
@@ -40,7 +41,7 @@ main: $(SRC_DIR)/main.c
 # Training PQ codebook binary
 train: $(SRC_DIR)/train_pq.c
 	$(SETUP_SPACK)
-	$(CC) $(CFLAGS) $< -o $(BUILD_DIR)/$@ $(LINK_FLAG)
+	$(MPICC) $(CFLAGS) $< -o $(BUILD_DIR)/$@ $(LINK_FLAG)
 
 clean:
 	rm -rf $(BUILD_DIR)
