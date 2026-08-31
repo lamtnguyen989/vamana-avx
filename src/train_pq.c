@@ -17,9 +17,9 @@ static inline float random_uniform() {return (float)rand() / (float)RAND_MAX;}
 
 // KMeans++ for initalization
 static void kmeans_init(
-    const float* sub_data, 
+    const float* subspace_data, 
     uint32_t n_points,
-    uint32_t sub_dim, 
+    uint32_t subspace_dim, 
     uint32_t K, 
     dist_fn_t dist_fn, 
     float *centroids 
@@ -32,17 +32,17 @@ static void kmeans_init(
 
     // Append a randomly selected starting centroid data
     size_t first_centroid_idx = (size_t)(random_uniform() * n_points);
-    memcpy(&centroids[0], &sub_data[first_centroid_idx * sub_dim], sub_dim * sizeof(float));
+    memcpy(&centroids[0], &subspace_data[first_centroid_idx * subspace_dim], subspace_dim * sizeof(float));
 
     // Selecting the remaining centroids
     for (size_t c = 1; c < K; c++) {
         // For each point, compute squared distance to nearest selected centroid and parallel reduce the total nearest distance
-        const float *latest_centroid = &centroids[(c-1) * sub_dim];
+        const float *latest_centroid = &centroids[(c-1) * subspace_dim];
         float total_dist = 0.0f;
 
         #pragma omp parallel for reduction(+:total_dist)
         for (size_t k = 0; k < n_points; k++) {
-            float d = dist_fn(&sub_data[k * sub_dim], latest_centroid, sub_dim);
+            float d = dist_fn(&subspace_data[k * subspace_dim], latest_centroid, subspace_dim);
             float d_squared = square(d);
             if (d < min_dist_sq[k]) {
                 min_dist_sq[k] = d_squared;
@@ -64,7 +64,7 @@ static void kmeans_init(
             }
         }
         
-        memcpy(&centroids[c*sub_dim], &sub_data[next_centroid_idx*sub_dim], sub_dim * sizeof(float));
+        memcpy(&centroids[c*subspace_dim], &subspace_data[next_centroid_idx*subspace_dim], subspace_dim * sizeof(float));
     }
 
     // Cleanups
@@ -73,18 +73,18 @@ static void kmeans_init(
 
 // Lloyd KMeans algorithm for one subspace 
 static inline void kmeans_lloyd(
-    const float *sub_data, 
+    const float *subspace_data, 
     uint32_t n_points, 
-    uint32_t sub_dim,                      
+    uint32_t subspace_dim,                      
     uint32_t K, 
     dist_fn_t dist_fn, 
     float *centroids, 
     uint32_t iterations,
-    float* tolerance)
+    float tolerance)
 {
     // Creating buffers
     uint32_t* assignments = (uint32_t*) malloc(n_points*sizeof(uint32_t));
-    float* cluster_sums = (float*) malloc(K*sub_dim*sizeof(float));
+    float* cluster_sums = (float*) malloc(K*subspace_dim*sizeof(float));
     uint32_t* cluster_size = (uint32_t*) malloc(K*sizeof(uint32_t));
 
     // Running through the iteration trainings
@@ -96,10 +96,10 @@ static inline void kmeans_lloyd(
             float closest_dist = FLT_MAX;
             uint32_t closest_idx = 0;
 
-            const float* point = &sub_data[(size_t)i * sub_dim];
+            const float* point = &subspace_data[(size_t)i * subspace_dim];
             for (uint32_t k = 0; k < K; k++) {
-                const float* curr_centroid = &centroids[(size_t)k * sub_dim];
-                float d = dist_fn(point, curr_centroid, sub_dim);
+                const float* curr_centroid = &centroids[(size_t)k * subspace_dim];
+                float d = dist_fn(point, curr_centroid, subspace_dim);
 
                 if (d < closest_dist) {
                     closest_dist = d;
@@ -112,18 +112,18 @@ static inline void kmeans_lloyd(
 
         /* Update steps */
         // Reset tally buffers
-        memset(cluster_sums, 0, K*sub_dim*sizeof(float));
+        memset(cluster_sums, 0, K*subspace_dim*sizeof(float));
         memset(cluster_size, 0, K * sizeof(uint32_t));
 
         for (uint32_t point_idx = 0; point_idx < n_points; point_idx++) {
             // Get cluster and point data
             uint32_t cluster_id = assignments[point_idx];
-            const float* point = &sub_data[(size_t)point_idx * sub_dim];
+            const float* point = &subspace_data[(size_t)point_idx * subspace_dim];
 
             // Get the sum accumulator for the cluster
-            float *sum = &cluster_sums[(size_t)cluster_id * sub_dim];
+            float *sum = &cluster_sums[(size_t)cluster_id * subspace_dim];
 
-            for (uint32_t dim_idx = 0; dim_idx < sub_dim; dim_idx++) {
+            for (uint32_t dim_idx = 0; dim_idx < subspace_dim; dim_idx++) {
                 sum[dim_idx] += point[dim_idx];
             }
 
@@ -131,22 +131,37 @@ static inline void kmeans_lloyd(
             cluster_size[cluster_id]++;
         }
 
+        // Update centroid and convergence check
+        float max_shift_sq = 0.0f;
         for (uint32_t k = 0; k < K; k++) {
             // Leave empty centroid where it was
             if (cluster_size[k] == 0) { 
                 continue;
             }
 
-            // Update centroid
-            float* centroid = &centroids[(size_t)k * sub_dim];
-            float* sum = &cluster_sums[(size_t)k * sub_dim];
-            
-            for (uint32_t dim_idx = 0; dim_idx < sub_dim; dim_idx++) {
-                centroid[dim_idx] = sum[dim_idx] / (float)cluster_size[k];
+            float* centroid = &centroids[(size_t)k * subspace_dim];
+            float* sum = &cluster_sums[(size_t)k * subspace_dim];
+            float shift_sq = 0.0f;
+
+            for (uint32_t dim_idx = 0; dim_idx < subspace_dim; dim_idx++) {
+                // Calculate the shift of the new cluster means with respect to the old centroid
+                float new_val = sum[dim_idx] / (float)cluster_size[k];
+                shift_sq += square(new_val - centroid[dim_idx]);
+
+                // Update the centroid 
+                centroid[dim_idx] = new_val;
+
+                // Update max global shift value
+                if (shift_sq > max_shift_sq) {
+                    max_shift_sq = shift_sq;
+                }
+            }
+
+            // Early stopping if no centroid move more than tolerance
+            if (tolerance >= 0.0f && max_shift_sq < tolerance) {
+                break;
             }
         }
-
-        // TODO: Convergence check
     }
 
     // Cleanups
