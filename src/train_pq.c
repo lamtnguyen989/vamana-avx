@@ -7,7 +7,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
+#define L2_IMPLEMENTATION
 #include "distance.h"
 #include "vecfile.h"
 #include "option.h"
@@ -255,13 +257,13 @@ int main(int argc, char** argv)
         }
         MPI_Abort(MPI_COMM_WORLD, 3);
     }
-    uint32_t sub_dim = dim / M;
+    uint32_t subspace_dim = dim / M;
 
     /* Set the OpenMP threads per rank and notify training metadata */
     omp_set_num_threads(threads_per_rank);
     if (rank == 0) {
-        printf("Training with %u sample points, dim=%u, M=%u subspaces, sub_dim=%u, K=%u centroids/subspace, %d ranks and %d threads with %.2f tolerance.\n",
-                n_vectors, dim, M, sub_dim, K, world_size, threads_per_rank, epsilon);
+        printf("Training with %u sample points, dim=%u, M=%u subspaces, subspace_dim=%u, K=%u centroids/subspace, %d ranks and %d threads with %.2f tolerance.\n",
+                n_vectors, dim, M, subspace_dim, K, world_size, threads_per_rank, epsilon);
     }
 
     /* Scatter subspaces across ranks and each rank train to completion */
@@ -287,12 +289,24 @@ int main(int argc, char** argv)
     // Notifying the subspace training range
     printf("Rank %d: Training subspace %d to subspace %d\n", rank, start, (start + subspace_count));
 
-    // Allocating space for training data
-    float* local_centroids = (float*) malloc((size_t)subspace_count * K * sizeof(float));
-    float* subspace_data = (float*) malloc((size_t)(n_vectors) * dim * sizeof(float));
-
-
+    // Initializing training data
+    float* local_centroids = (float*) malloc((size_t)subspace_count * K * subspace_dim * sizeof(float));
+    float* subspace_data = (float*) malloc((size_t)n_vectors * subspace_dim * sizeof(float));
     
+    dist_fn_t dist_fn = metric();
+
+    // Actual training loop
+    time_t t0 = time(NULL);
+    for (size_t local_m = 0; local_m < subspace_count; local_m++) {
+        size_t m = start + local_m;
+        for (size_t i = 0; i < n_vectors; i++) {
+            memcpy(&subspace_data[i*subspace_dim], &data[i*dim + m*subspace_dim], subspace_dim * sizeof(float));
+        }
+        float *centroids_m = &local_centroids[(size_t)local_m * K * subspace_dim];
+        kmeans_init(subspace_data, n_vectors, subspace_dim, K, dist_fn, centroids_m);
+        kmeans_lloyd(subspace_data, n_vectors, subspace_dim, K, dist_fn, centroids_m, iters, epsilon);
+        printf( "Rank %d: subspace %u done (%lds elapsed)\n", rank, m, time(NULL) - t0);
+    }
     
     /* Gather finished centroid back to rank 0 */
 
