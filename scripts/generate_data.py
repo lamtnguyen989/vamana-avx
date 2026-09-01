@@ -7,10 +7,11 @@ def gen_random_cluster(total_vectors, dim, n_clusters, cluster_st_dev, seed):
     Generate random vectors that is clustered
     """
     random.seed(seed)
+    centers = [[random.uniform(-10, 10) for _ in range(dim)] for _ in range(n_clusters)]
     vectors = []
-    for _ in range(num_vectors):
-        c = centers[random.randrange(num_clusters)]
-        vectors.append([random.gauss(c[d], cluster_std) for d in range(dim)])
+    for _ in range(total_vectors):
+        c = centers[random.randrange(n_clusters)]
+        vectors.append([random.gauss(c[d], cluster_st_dev) for d in range(dim)])
     return vectors
 
 # Writing data based on the serialization format
@@ -30,6 +31,6 @@ if __name__ == "__main__":
     ap.add_argument("--seed", type=int, default=69)
     args = ap.parse_args()
 
-    vecs = gen(args.num_vectors, args.dim, args.num_clusters, args.cluster_std, args.seed)
+    vecs = gen_random_cluster(args.num_vectors, args.dim, args.num_clusters, args.cluster_st_dev, args.seed)
     write_vecfile(args.out_path, vecs, args.dim)
     print(f"Wrote data to {args.out_path}")

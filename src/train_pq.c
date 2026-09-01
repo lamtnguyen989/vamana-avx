@@ -260,11 +260,19 @@ int main(int argc, char** argv)
     /* Set the OpenMP threads per rank and notify training metadata */
     omp_set_num_threads(threads_per_rank);
     if (rank == 0) {
-        printf("Training with %u sample points, dim=%u, M=%u subspaces, sub_dim=%u, K=%u centroids/subspace, %d ranks and %d threads\n",
+        printf("Training with %u sample points, dim=%u, M=%u subspaces, sub_dim=%u, K=%u centroids/subspace, %d ranks and %d threads.\n",
                 n_vectors, dim, M, sub_dim, K, world_size, threads_per_rank);
     }
 
     /* Scatter subspaces across ranks and each rank train to completion */
+    uint32_t base = M / (uint32_t)world_size;
+    uint32_t remainder = M % (uint32_t)world_size;
+
+    uint32_t start = (uint32_t)rank * base + ((uint32_t)rank < remainder ? (uint32_t)rank : remainder);
+    uint32_t subspace_count = base + ((uint32_t)rank < remainder ? 1 : 0);
+
+    // Notifying the subspace training range
+    printf("Rank %d: Training subspace %d to subspace %d\n", rank, start, (start + subspace_count));
 
     /* Gather finished centroid back to rank 0 */
 
