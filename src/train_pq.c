@@ -95,7 +95,7 @@ static inline void kmeans_lloyd(
     for (uint32_t iter = 0; iter < iterations; iter++) {
         /* Cluster assignment (parallelized) */
         // Finding closest centroid for every point in the dataset
-        #pragma omp parallel for 
+        #pragma omp parallel for schedule(dynamic, 256)
         for (uint32_t i = 0; i < n_points; i++) {
             float closest_dist = FLT_MAX;
             uint32_t closest_idx = 0;

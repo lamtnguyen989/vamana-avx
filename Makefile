@@ -5,6 +5,8 @@ SRC_DIR = src
 BUILD_DIR = build
 MPICC := mpicc
 
+METRIC_IMPL ?= -DL2_IMPLEMENTATION
+
 # Spack information
 # How likely is it that people use this name for one of their spack env name?
 SPACK_ENV_NAME ?= vamana-avx
@@ -33,15 +35,14 @@ define SETUP_SPACK
 	mkdir -p $(BUILD_DIR)
 endef
 
-# Test compile for now
-main: $(SRC_DIR)/main.c
-	$(SETUP_SPACK)
-	$(CC) $(CFLAGS) $< -o $(BUILD_DIR)/$@ $(LINK_FLAG)
-
 # Training PQ codebook binary
 train: $(SRC_DIR)/train_pq.c
 	$(SETUP_SPACK)
-	$(MPICC) $(CFLAGS) $< -o $(BUILD_DIR)/$@ $(LINK_FLAG)
+	$(MPICC) $(CFLAGS) $< -o $(BUILD_DIR)/$@ $(LINK_FLAG) $(METRIC_IMPL)
+
+# Encode PQ on data shard after training a codebook binary
+encode: $(SRC_DIR)/encode_pq.c
+	$(CC) $(CFLAGS) $< -o $(BUILD_DIR)/$@ $(LINK_FLAG) $(METRIC_IMPL)
 
 clean:
 	rm -rf $(BUILD_DIR)
