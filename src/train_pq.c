@@ -48,7 +48,7 @@ static void kmeans_init(
         for (size_t k = 0; k < n_points; k++) {
             float d = dist_fn(&data[k * dim], latest_centroid, dim);
             float d_squared = square(d);
-            if (d < min_dist_sq[k]) {
+            if (d_squared < min_dist_sq[k]) {
                 min_dist_sq[k] = d_squared;
             }
 
@@ -160,11 +160,11 @@ static inline void kmeans_lloyd(
                     max_shift_sq = shift_sq;
                 }
             }
+        }
 
-            // Early stopping if no centroid move more than tolerance
-            if (tolerance > 0.0f && max_shift_sq < tolerance) {
-                break;
-            }
+        // Early stopping if no centroid move more than tolerance
+        if (tolerance > 0.0f && max_shift_sq < tolerance) {
+            break;
         }
     }
 
@@ -318,11 +318,12 @@ int main(int argc, char** argv)
     // Setting up booking keeping at rank 0
     int* recvcounts = NULL;
     int* displs = NULL;
-    float* recv_centroids = (float*) malloc(M*K*subspace_dim *sizeof(float));
+    float* recv_centroids = NULL;
 
     if (rank == 0) {
         recvcounts = (int*) malloc(world_size * sizeof(int));
         displs = (int*) malloc(world_size * sizeof(int));
+        recv_centroids = (float*) malloc(M*K*subspace_dim *sizeof(float));
 
         for (int r = 0; r < world_size; r++) {
             uint32_t cnt = base + ((uint32_t)r < remainder ? 1 : 0);
@@ -365,6 +366,7 @@ int main(int argc, char** argv)
 
 
     /* Cleanups */
+    free(data);
     free(local_centroids);
     free(subspace_data);
     MPI_Finalize();
