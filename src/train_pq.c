@@ -183,10 +183,42 @@ int main(int argc, char** argv)
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 
-    // CLI parsing
-    if (rank == 0) {
-        
+    // CLI parsing (very basic to start)
+    if (argc < 3) {
+        if (rank == 0) {
+            fprintf(stderr,
+                "Usage: mpirun -n <ranks> %s <sample.bin> <codebook.bin> "
+                "[M=16] [K=256] [iters=30] [threads_per_rank=4] [seed]\n"
+                "\n"
+                "  sample.bin       Representative sample from the full dataset\n"
+                "  codebook.bin     Output codebook file\n"
+                "  M                Number of PQ subspaces (default: 16)\n"
+                "  K                Centroids per subspace (default: 256), maximum allowed value: 256 \n"
+                "  iters            K-means iterations (default: 30)\n"
+                "  threads_per_rank CPU threads per MPI rank (default: 4)\n"
+                "  seed             Optional initialization seed\n",
+                argv[0]);
+
+        }
+        MPI_Finalize();
+        return 1;
     }
+
+    const char *vec_path = argv[1];
+    const char *codebook_path = argv[2];
+    uint32_t M = argc > 3 ? (uint32_t)atoi(argv[3]) : 16;
+    uint32_t K = argc > 4 ? (uint32_t)atoi(argv[4]) : 256;
+    uint32_t iters = argc > 5 ? (uint32_t)atoi(argv[5]) : 30;
+    int threads_per_rank = argc > 6 ? atoi(argv[6]) : 4;
+
+    OPTION(uint32_t) seed_opt = argc > 7
+        ? OPTION_SOME(uint32_t, (uint32_t)strtoul(argv[7], NULL, 10))
+        : OPTION_NONE(uint32_t);
+
+    if (K > 256) { 
+        fprintf(stderr, "K must be <= 256 (codes are bytes)\n"); 
+        MPI_Abort(MPI_COMM_WORLD, 1);
+    }    
 
     // Initalize K-means
     dist_fn_t dist_fn = metric();
