@@ -13,8 +13,16 @@ def gen_random_cluster(total_vectors, dim, n_clusters, cluster_st_dev, seed):
         vectors.append([random.gauss(c[d], cluster_std) for d in range(dim)])
     return vectors
 
+# Writing data based on the serialization format
+def write_vecfile(path, vectors, dim):
+    with open(path, "wb") as f:
+        f.write(struct.pack("<II", len(vectors), dim))
+        for v in vectors:
+            f.write(struct.pack(f"<{dim}f", *v))
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
+    ap.add_argument("out_path")
     ap.add_argument("--num-vectors", type=int, default=50000)
     ap.add_argument("--dim", type=int, default=128)
     ap.add_argument("--num-clusters", type=int, default=200)
@@ -22,4 +30,6 @@ if __name__ == "__main__":
     ap.add_argument("--seed", type=int, default=69)
     args = ap.parse_args()
 
-    # TODO
+    vecs = gen(args.num_vectors, args.dim, args.num_clusters, args.cluster_std, args.seed)
+    write_vecfile(args.out_path, vecs, args.dim)
+    print(f"Wrote data to {args.out_path}")
