@@ -260,24 +260,46 @@ int main(int argc, char** argv)
     /* Set the OpenMP threads per rank and notify training metadata */
     omp_set_num_threads(threads_per_rank);
     if (rank == 0) {
-        printf("Training with %u sample points, dim=%u, M=%u subspaces, sub_dim=%u, K=%u centroids/subspace, %d ranks and %d threads.\n",
-                n_vectors, dim, M, sub_dim, K, world_size, threads_per_rank);
+        printf("Training with %u sample points, dim=%u, M=%u subspaces, sub_dim=%u, K=%u centroids/subspace, %d ranks and %d threads with %.2f tolerance.\n",
+                n_vectors, dim, M, sub_dim, K, world_size, threads_per_rank, epsilon);
     }
 
     /* Scatter subspaces across ranks and each rank train to completion */
-    uint32_t base = M / (uint32_t)world_size;
-    uint32_t remainder = M % (uint32_t)world_size;
+    // Randomization initialization for each rank
+    if (OPTION_IS_SOME(seed_opt)) {
+        if (rank == 0) {
+            printf("Training with random base seed: %u\n", seed_opt.value);
+        }
+        srand(seed_opt.value + rank);
+    } else {
+        if (rank == 0) {
+            printf("No seed provided, this training might not be reproducible.");
+        }
+    }
 
-    uint32_t start = (uint32_t)rank * base + ((uint32_t)rank < remainder ? (uint32_t)rank : remainder);
-    uint32_t subspace_count = base + ((uint32_t)rank < remainder ? 1 : 0);
+    // Partition the work
+    size_t base = (size_t)M / world_size;
+    size_t remainder = (size_t)M % world_size;
+
+    size_t start = rank*base + (rank < remainder ? rank : remainder);
+    size_t subspace_count = base + (rank < remainder ? 1 : 0);
 
     // Notifying the subspace training range
     printf("Rank %d: Training subspace %d to subspace %d\n", rank, start, (start + subspace_count));
 
+    // Allocating space for training data
+    float* local_centroids = (float*) malloc((size_t)subspace_count * K * sizeof(float));
+    float* subspace_data = (float*) malloc((size_t)(n_vectors) * dim * sizeof(float));
+
+
+    
+    
     /* Gather finished centroid back to rank 0 */
 
 
     /* Cleanups */
+    free(local_centroids);
+    free(subspace_data);
     MPI_Finalize();
 
     return 0;
