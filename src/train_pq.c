@@ -1,4 +1,5 @@
 #include <float.h>
+#include <math.h>
 #include <mpi.h>
 #include <omp.h>
 #include <stddef.h>
@@ -225,24 +226,48 @@ int main(int argc, char** argv)
     }
 
     /* Reading the sample as rank 0 and broadcast (small dataset, relatively speaking) */
+    uint32_t n_vectors = 0;
+    uint32_t dim = 0;
+    float* data = NULL;
     if (rank == 0) {
         // Loading sample from the vecfile serialization
         VecFile vf;
         if (vecfile_load(argv[1], &vf) != 0) {
             MPI_Abort(MPI_COMM_WORLD, 2);
         }
-        uint32_t n_vectors = vf.num_vectors;
-        uint32_t dim = vf.dim;
-        float* data = vf.data;
+        n_vectors = vf.num_vectors;
+        dim = vf.dim;
+        data = vf.data;
+    }
+    // Broadcast data to other
+    MPI_Bcast(&n_vectors, 1, MPI_UINT32_T, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&dim, 1, MPI_UINT32_T, 0, MPI_COMM_WORLD);
 
-        // Broadcast data to other ranks
-        MPI_Bcast(&n_vectors, 1, MPI_UINT32_T, 0, MPI_COMM_WORLD);
-        MPI_Bcast(&dim, 1, MPI_UINT32_T, 0, MPI_COMM_WORLD);
-        MPI_Bcast(data, n_vectors * dim, MPI_FLOAT, 0, MPI_COMM_WORLD);
+    if (rank != 0) {
+        data = (float*) malloc(n_vectors*dim*sizeof(float));
+    }
+    MPI_Bcast(data, n_vectors * dim, MPI_FLOAT, 0, MPI_COMM_WORLD);
+
+    /* Determining quantization sub-dimension */
+    if (dim % M != 0) {
+        if (rank == 0) {
+            fprintf(stderr, "dim (%u) must be divisible by M (%u)\n", dim, M);
+        }
+        MPI_Abort(MPI_COMM_WORLD, 3);
+    }
+    uint32_t sub_dim = dim / M;
+
+    /* Set the OpenMP threads per rank and notify training metadata */
+    omp_set_num_threads(threads_per_rank);
+    if (rank == 0) {
+        printf("Training with %u sample points, dim=%u, M=%u subspaces, sub_dim=%u, K=%u centroids/subspace, %d ranks and %d threads\n",
+                n_vectors, dim, M, sub_dim, K, world_size, threads_per_rank);
     }
 
-    /* Initalize K-means */
-    dist_fn_t dist_fn = metric();
+    /* Scatter subspaces across ranks and each rank train to completion */
+
+    /* Gather finished centroid back to rank 0 */
+
 
     /* Cleanups */
     MPI_Finalize();

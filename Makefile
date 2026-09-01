@@ -1,6 +1,6 @@
 # Compiling information
 CFLAGS  ?= -O3 -flto -march=native
-LINK_FLAG = -lm
+LINK_FLAG = -lm -fopenmp
 SRC_DIR = src
 BUILD_DIR = build
 MPICC := mpicc
