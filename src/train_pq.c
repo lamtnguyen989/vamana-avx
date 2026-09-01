@@ -215,6 +215,12 @@ int main(int argc, char** argv)
     }
     uint32_t iters = argc > 5 ? (uint32_t)atoi(argv[5]) : 30;
     int threads_per_rank = argc > 6 ? atoi(argv[6]) : 4;
+    if (threads_per_rank > 1) {
+        if (rank == 0) {
+            fprintf(stderr, "Since floating-point arithmetics are non-associative, running with more than 1 threads are non-determistic! "
+                            "But overall values should be the similar.\n");
+        }
+    }
     float epsilon = argc > 7 ? atof(argv[7]) : 0.0f;
 
     OPTION(uint32_t) seed_opt = argc > 8
