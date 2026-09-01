@@ -9,7 +9,7 @@
         T value;            \
     } Option_##T;
 
-#define OPTION_TYPE(T) Option_##T
+#define OPTION(T) Option_##T
 #define OPTION_NONE(T)      ((Option_##T){ .has_value = 0 })
 #define OPTION_SOME(T, v)   ((Option_##T){ .has_value = 1, .value = (v) })
 #define OPTION_IS_SOME(opt) ((opt).has_value)

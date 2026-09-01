@@ -3,6 +3,7 @@
 #include <omp.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -11,6 +12,7 @@
 #include "option.h"
 
 DEFINE_OPTION(uint32_t);
+DEFINE_OPTION(float);
 
 // Randomness helper
 static inline float random_uniform() {return (float)rand() / (float)RAND_MAX;}
@@ -112,7 +114,7 @@ static inline void kmeans_lloyd(
 
         /* Update steps */
         // Reset tally buffers
-        memset(cluster_sums, 0, K*dim*sizeof(float));
+        memset(cluster_sums, 0, K * dim * sizeof(float));
         memset(cluster_size, 0, K * sizeof(uint32_t));
 
         for (uint32_t point_idx = 0; point_idx < n_points; point_idx++) {
@@ -158,7 +160,7 @@ static inline void kmeans_lloyd(
             }
 
             // Early stopping if no centroid move more than tolerance
-            if (tolerance >= 0.0f && max_shift_sq < tolerance) {
+            if (tolerance > 0.0f && max_shift_sq < tolerance) {
                 break;
             }
         }
@@ -172,5 +174,25 @@ static inline void kmeans_lloyd(
 
 int main(int argc, char** argv)
 {
+    // Initalize MPI threading environments
+    int provided;
+    MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &provided);
+
+    // Initalize MPI rank and world size
+    int rank, world_size;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+
+    // CLI parsing
+    if (rank == 0) {
+        
+    }
+
+    // Initalize K-means
+    dist_fn_t dist_fn = metric();
+
+    // Cleanups
+    MPI_Finalize();
+
     return 0;
 }
