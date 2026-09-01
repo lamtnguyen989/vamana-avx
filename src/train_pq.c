@@ -9,10 +9,10 @@
 #include <string.h>
 #include <time.h>
 
-#define L2_IMPLEMENTATION
 #include "distance.h"
 #include "vecfile.h"
 #include "option.h"
+#include "pq.h"
 
 DEFINE_OPTION(uint32_t);
 
@@ -38,7 +38,7 @@ static void kmeans_init(
     size_t first_centroid_idx = (size_t)(random_uniform() * n_points);
     memcpy(&centroids[0], &data[first_centroid_idx * dim], dim * sizeof(float));
 
-    // Selecting the remaining centroids
+    // Selecting the remainderaining centroids
     for (size_t c = 1; c < K; c++) {
         // For each point, compute squared distance to nearest selected centroid and parallel reduce the total nearest distance
         const float *latest_centroid = &centroids[(c-1) * dim];
@@ -283,7 +283,7 @@ int main(int argc, char** argv)
     size_t base = (size_t)M / world_size;
     size_t remainder = (size_t)M % world_size;
 
-    size_t start = rank*base + (rank < remainder ? rank : remainder);
+    size_t start = rank*base + (rank < remainder? rank : remainder);
     size_t subspace_count = base + (rank < remainder ? 1 : 0);
 
     // Notifying the subspace training range
@@ -309,6 +309,53 @@ int main(int argc, char** argv)
     }
     
     /* Gather finished centroid back to rank 0 */
+    // Setting up booking keeping at rank 0
+    int* recvcounts = NULL;
+    int* displs = NULL;
+    float* recv_centroids = (float*) malloc(M*K*subspace_dim *sizeof(float));
+
+    if (rank == 0) {
+        recvcounts = (int*) malloc(world_size * sizeof(int));
+        displs = (int*) malloc(world_size * sizeof(int));
+
+        for (int r = 0; r < world_size; r++) {
+            uint32_t cnt = base + ((uint32_t)r < remainder ? 1 : 0);
+            uint32_t start = (uint32_t)r * base + ((uint32_t)r < remainder ? (uint32_t)r : remainder);
+            recvcounts[r] = (int)(cnt * K * subspace_dim);
+            displs[r] = (int)(start * K * subspace_dim);
+        }
+    }
+
+    // Execute the gather
+    MPI_Gatherv(local_centroids, (int)(subspace_count * K * subspace_dim), MPI_FLOAT,
+                recv_centroids, recvcounts, displs,
+                MPI_FLOAT, 0, MPI_COMM_WORLD);
+    
+    // Serialize the codebook (at rank 0)
+    if (rank == 0) {
+        // Initalize codebook data
+        PQCodebook pq = {
+            .centroids = recv_centroids,
+            .hash = 0,
+            .dim = dim,
+            .M = M,
+            .sub_dim = subspace_dim,
+            .K = K,
+        };
+
+        // Serialize
+        if (pq_codebook_save(codebook_path, &pq) != 0) {
+            MPI_Abort(MPI_COMM_WORLD, 4);
+        }
+
+        // Notify the trained codebook
+        printf("Wrote the codebook with stamp: %016llx\n", (unsigned long long)pq.hash);
+
+        // Cleanup the book keeping
+        pq_codebook_free(&pq);
+        free(recvcounts);
+        free(displs);
+    }
 
 
     /* Cleanups */
