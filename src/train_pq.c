@@ -26,8 +26,8 @@ static void kmeans_init(
     uint32_t dim, 
     uint32_t K, 
     dist_fn_t dist_fn, 
-    float* centroids 
-){
+    float* centroids)
+{
     // Initialize distance tally
     float* min_dist_sq = (float*) malloc(n_points * sizeof(float));
     for (uint32_t k = 0; k < n_points; k++) {
@@ -223,7 +223,7 @@ int main(int argc, char** argv)
 
     // Extra warnings
     if (M < world_size && rank == 0) {
-        fprintf(stderr, "Since M=%u < world_size=%d — some ranks will get zero subspaces "
+        fprintf(stderr, "Since M=%u < world_size=%d, some ranks will get zero subspaces "
                         "and sit idle; consider running with fewer ranks or a larger M\n", M, world_size);
     }
 
@@ -262,7 +262,7 @@ int main(int argc, char** argv)
     /* Set the OpenMP threads per rank and notify training metadata */
     omp_set_num_threads(threads_per_rank);
     if (rank == 0) {
-        printf("Training with %u sample points, dim=%u, M=%u subspaces, subspace_dim=%u, K=%u centroids/subspace, %d ranks and %d threads with %.2f tolerance.\n",
+        printf("Training with %u sample points, dim=%u, M=%u subspaces, subspace_dim=%u, K=%u centroids/subspace, %d ranks and %d threads with %.8f tolerance.\n",
                 n_vectors, dim, M, subspace_dim, K, world_size, threads_per_rank, epsilon);
     }
 
@@ -287,7 +287,7 @@ int main(int argc, char** argv)
     size_t subspace_count = base + (rank < remainder ? 1 : 0);
 
     // Notifying the subspace training range
-    printf("Rank %d: Training subspace %d to subspace %d\n", rank, start, (start + subspace_count));
+    printf("Rank %d: Training subspace %ld to subspace %ld\n", rank, start, (start + subspace_count));
 
     // Initializing training data
     float* local_centroids = (float*) malloc((size_t)subspace_count * K * subspace_dim * sizeof(float));
@@ -305,7 +305,7 @@ int main(int argc, char** argv)
         float *centroids_m = &local_centroids[(size_t)local_m * K * subspace_dim];
         kmeans_init(subspace_data, n_vectors, subspace_dim, K, dist_fn, centroids_m);
         kmeans_lloyd(subspace_data, n_vectors, subspace_dim, K, dist_fn, centroids_m, iters, epsilon);
-        printf( "Rank %d: subspace %u done (%lds elapsed)\n", rank, m, time(NULL) - t0);
+        printf("Rank %d: subspace %lu done (%lds elapsed)\n", rank, m, time(NULL) - t0);
     }
     
     /* Gather finished centroid back to rank 0 */
