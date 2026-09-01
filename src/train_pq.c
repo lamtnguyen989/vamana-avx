@@ -12,7 +12,6 @@
 #include "option.h"
 
 DEFINE_OPTION(uint32_t);
-DEFINE_OPTION(float);
 
 // Randomness helper
 static inline float random_uniform() {return (float)rand() / (float)RAND_MAX;}
@@ -174,21 +173,20 @@ static inline void kmeans_lloyd(
 
 int main(int argc, char** argv)
 {
-    // Initalize MPI threading environments
+    /* Initalize MPI */
     int provided;
     MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &provided);
 
-    // Initalize MPI rank and world size
     int rank, world_size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 
-    // CLI parsing (very basic to start)
+    /* CLI parsing (very basic) */
     if (argc < 3) {
         if (rank == 0) {
             fprintf(stderr,
                 "Usage: mpirun -n <ranks> %s <sample.bin> <codebook.bin> "
-                "[M=16] [K=256] [iters=30] [threads_per_rank=4] [seed]\n"
+                "[M=16] [K=256] [iters=30] [threads_per_rank=4] [epsilon=0.0] [seed]\n"
                 "\n"
                 "  sample.bin       Representative sample from the full dataset\n"
                 "  codebook.bin     Output codebook file\n"
@@ -196,34 +194,57 @@ int main(int argc, char** argv)
                 "  K                Centroids per subspace (default: 256), maximum allowed value: 256 \n"
                 "  iters            K-means iterations (default: 30)\n"
                 "  threads_per_rank CPU threads per MPI rank (default: 4)\n"
-                "  seed             Optional initialization seed\n",
+                "  epsilon          Tolerance for convergence consideration (default: 0.0)\n"
+                "  seed             Optional reproduciblity initialization seed\n",
                 argv[0]);
 
         }
         MPI_Finalize();
         return 1;
     }
-
     const char *vec_path = argv[1];
     const char *codebook_path = argv[2];
     uint32_t M = argc > 3 ? (uint32_t)atoi(argv[3]) : 16;
     uint32_t K = argc > 4 ? (uint32_t)atoi(argv[4]) : 256;
-    uint32_t iters = argc > 5 ? (uint32_t)atoi(argv[5]) : 30;
-    int threads_per_rank = argc > 6 ? atoi(argv[6]) : 4;
-
-    OPTION(uint32_t) seed_opt = argc > 7
-        ? OPTION_SOME(uint32_t, (uint32_t)strtoul(argv[7], NULL, 10))
-        : OPTION_NONE(uint32_t);
-
     if (K > 256) { 
         fprintf(stderr, "K must be <= 256 (codes are bytes)\n"); 
         MPI_Abort(MPI_COMM_WORLD, 1);
-    }    
+    }
+    uint32_t iters = argc > 5 ? (uint32_t)atoi(argv[5]) : 30;
+    int threads_per_rank = argc > 6 ? atoi(argv[6]) : 4;
+    float epsilon = argc > 7 ? atof(argv[7]) : 0.0f;
 
-    // Initalize K-means
+    OPTION(uint32_t) seed_opt = argc > 8
+        ? OPTION_SOME(uint32_t, (uint32_t)strtoul(argv[8], NULL, 10))
+        : OPTION_NONE(uint32_t);
+
+    // Extra warnings
+    if (M < world_size && rank == 0) {
+        fprintf(stderr, "Since M=%u < world_size=%d — some ranks will get zero subspaces "
+                        "and sit idle; consider running with fewer ranks or a larger M\n", M, world_size);
+    }
+
+    /* Reading the sample as rank 0 and broadcast (small dataset, relatively speaking) */
+    if (rank == 0) {
+        // Loading sample from the vecfile serialization
+        VecFile vf;
+        if (vecfile_load(argv[1], &vf) != 0) {
+            MPI_Abort(MPI_COMM_WORLD, 2);
+        }
+        uint32_t n_vectors = vf.num_vectors;
+        uint32_t dim = vf.dim;
+        float* data = vf.data;
+
+        // Broadcast data to other ranks
+        MPI_Bcast(&n_vectors, 1, MPI_UINT32_T, 0, MPI_COMM_WORLD);
+        MPI_Bcast(&dim, 1, MPI_UINT32_T, 0, MPI_COMM_WORLD);
+        MPI_Bcast(data, n_vectors * dim, MPI_FLOAT, 0, MPI_COMM_WORLD);
+    }
+
+    /* Initalize K-means */
     dist_fn_t dist_fn = metric();
 
-    // Cleanups
+    /* Cleanups */
     MPI_Finalize();
 
     return 0;
