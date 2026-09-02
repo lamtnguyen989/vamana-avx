@@ -12,7 +12,7 @@ int main(int argc, char** argv)
 {
     // CLI parsing
     if (argc < 4) {
-        fprintf(stderr, "usage: %s <vectors_shard_N.bin> <codebook.bin> <codes_shard_N.bin> [threads=4]\n", argv[0]);
+        fprintf(stderr, "usage: %s <vectors_shard_N.vecf> <codebook.pqbook> <codes_shard_N.pqbin> [threads=4]\n", argv[0]);
         return 1;
     }
     const char *shard_path = argv[1];

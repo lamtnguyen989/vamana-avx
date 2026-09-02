@@ -119,10 +119,10 @@ static inline void kmeans_lloyd(
         memset(cluster_sums, 0, K * dim * sizeof(float));
         memset(cluster_size, 0, K * sizeof(uint32_t));
 
-        for (uint32_t point_idx = 0; point_idx < n_points; point_idx++) {
+        for (size_t point_idx = 0; point_idx < n_points; point_idx++) {
             // Get cluster and point data
             uint32_t cluster_id = assignments[point_idx];
-            const float* point = &data[(size_t)point_idx * dim];
+            const float* point = &data[point_idx * dim];
 
             // Get the sum accumulator for the cluster
             float *sum = &cluster_sums[(size_t)cluster_id * dim];
@@ -188,11 +188,11 @@ int main(int argc, char** argv)
     if (argc < 3) {
         if (rank == 0) {
             fprintf(stderr,
-                "Usage: mpirun -n <ranks> %s <sample.bin> <codebook.bin> "
+                "Usage: mpirun -n <ranks> %s <sample.vecf> <codebook.pqbook> "
                 "[M=16] [K=256] [iters=30] [threads_per_rank=4] [epsilon=0.0] [seed]\n"
                 "\n"
-                "  sample.bin       Representative sample from the full dataset\n"
-                "  codebook.bin     Output codebook file\n"
+                "  sample.vecf      Representative sample from the full dataset\n"
+                "  codebook.pqbook  Output codebook file\n"
                 "  M                Number of PQ subspaces (default: 16)\n"
                 "  K                Centroids per subspace (default: 256), maximum allowed value: 256 \n"
                 "  iters            K-means iterations (default: 30)\n"
