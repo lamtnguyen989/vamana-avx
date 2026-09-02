@@ -1,5 +1,6 @@
 // Product Quantization implementation
 
+
 #ifndef PQ_H
 #define PQ_H
 
@@ -15,6 +16,8 @@
 
 #define PQ_MAGIC 0x50513031u /* ASCII code for "PQ01" */
 
+/* Product Quantization codebook */
+// This will be serialized to `.pqbook` for storing data
 typedef struct {
     float* centroids;   // Centroid data
     uint64_t hash;      // Centroid signature for versioning
@@ -179,6 +182,7 @@ static inline int pq_codebook_load(const char* path, PQCodebook *pq)
 
 
 /* Product quantization encodings of the codebook serialization (used for encoding data shard) */
+// This will be serialized to `.pqbin` for storing data
 typedef struct {
     uint32_t n_points;
     uint32_t M;

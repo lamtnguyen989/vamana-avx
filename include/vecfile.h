@@ -1,4 +1,5 @@
-// A basic vector codebook serialization format for quantization
+// A basic vectors serialization data format for quantization
+// This is our own file format of `.vecf` for storing data
 
 /*
 * Layout (little-endian, no padding):
