@@ -17,4 +17,4 @@
 #define OPTION_UNWRAP_OR(opt, default_val) ((opt).has_value ? (opt).value : (default_val))
 
 
-#endif
+#endif /* OPTION_H */
