@@ -356,7 +356,7 @@ int main(int argc, char** argv)
         }
 
         // Notify the trained codebook
-        printf("Wrote the codebook with stamp: %016llx\n", (unsigned long long)pq.hash);
+        printf("Wrote the codebook with hash: %016llx\n", (unsigned long long)pq.hash);
 
         // Cleanup the book keeping
         pq_codebook_free(&pq);

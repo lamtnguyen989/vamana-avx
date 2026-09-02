@@ -35,19 +35,6 @@ typedef struct {
 } VecFile;
 
 
-// Cleanups
-static inline void vecfile_free(VecFile* vf)
-{
-    // Free the heap data
-    free(vf->data);
-
-    // Default stack data
-    vf->data = NULL;
-    vf->num_vectors = 0;
-    vf->dim = 0;
-}
-
-
 // Loading serialization data
 static inline int vecfile_load(const char* path, VecFile* vf)
 {
@@ -91,6 +78,24 @@ static inline int vecfile_save(const char *path, uint32_t num_vectors, uint32_t 
     fclose(file);
 
     return 0;
+}
+
+// Indexing vecfile data
+static inline float *vecfile_at(const VecFile *vf, uint32_t k) {
+    return &vf->data[(size_t)k * vf->dim];
+}
+
+
+// Cleanups
+static inline void vecfile_free(VecFile* vf)
+{
+    // Free the heap data
+    free(vf->data);
+
+    // Default stack data
+    vf->data = NULL;
+    vf->num_vectors = 0;
+    vf->dim = 0;
 }
 
 #endif
