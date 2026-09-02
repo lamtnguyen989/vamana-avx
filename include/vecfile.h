@@ -81,7 +81,7 @@ static inline int vecfile_save(const char *path, uint32_t num_vectors, uint32_t 
 }
 
 // Indexing vecfile data
-static inline float *vecfile_at(const VecFile *vf, uint32_t k) {
+static inline float* vecfile_data_at(const VecFile *vf, uint32_t k) {
     return &vf->data[(size_t)k * vf->dim];
 }
 

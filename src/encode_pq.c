@@ -50,7 +50,7 @@ int main(int argc, char** argv)
     omp_set_num_threads(num_threads);
     #pragma parallel for schedule(dynamic)
     for (size_t k = 0; k < vf.num_vectors; k++) {
-        pq_encode(&pq, dist_fn, vecfile_at(&vf, k), &codes[k * pq.M]);
+        pq_encode(&pq, dist_fn, vecfile_data_at(&vf, k), &codes[k * pq.M]);
     }
 
     // Write the code serialization
