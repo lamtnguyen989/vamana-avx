@@ -27,14 +27,14 @@ typedef struct {
 
 // Centroid getter
 static inline float* pq_get_centroid(const PQCodebook* pq, uint32_t m, uint32_t k) {
-    return pq->centroids + ((size_t) m * pq->K + k) * pq->sub_dim;
+    return &pq->centroids[((size_t) m * pq->K + k) * pq->sub_dim];
 }
 
 // Perform the product quantization encoding
 static inline void pq_encode(const PQCodebook* pq, dist_fn_t distance, const float* vec, uint8_t* out) {
     for (uint32_t m = 0; m < pq->M; m++) {
         // Pointer to the m-th sub-vector slice
-        const float* sub_vec = vec + (size_t)m * pq->sub_dim;
+        const float* sub_vec = &vec[(size_t)m * pq->sub_dim];
 
         // Find the closest centroid to the representative subspace vector
         float closest_dist = FLT_MAX;
@@ -54,7 +54,7 @@ static inline void pq_encode(const PQCodebook* pq, dist_fn_t distance, const flo
 static inline void pq_build_distance_table(const PQCodebook* pq, dist_fn_t distance, const float* query, float* table)
 {
     for (uint32_t m = 0; m < pq->M; m++) {
-        const float* query_sub_vec = query + (size_t)m * pq->sub_dim;
+        const float* query_sub_vec = &query[(size_t)m * pq->sub_dim];
         for (uint32_t k = 0; k < pq->K; k++) {
             table[(size_t)m * pq->K + k] = distance(query_sub_vec, pq_get_centroid(pq, m, k), pq->sub_dim);
         }
@@ -65,8 +65,8 @@ static inline void pq_build_distance_table(const PQCodebook* pq, dist_fn_t dista
 static inline void pq_adc_distances(const PQCodebook* pq, float* adc_table, uint8_t* codes) 
 {
     float result = 0.0f;
-    for (uint32_t m = 0; m < pq->M; m++) {
-        result += adc_table[(size_t)m * pq->K + codes[m]];
+    for (size_t m = 0; m < pq->M; m++) {
+        result += adc_table[m * pq->K + codes[m]];
     }
 }
 
@@ -176,6 +176,75 @@ static inline int pq_codebook_load(const char* path, PQCodebook *pq)
 
     return 0;
 }
+
+
+/* Product quantization encodings of the codebook serialization (used for encoding data shard) */
+typedef struct {
+    uint32_t n_points;
+    uint32_t M;
+    uint64_t codebook_hash;
+    uint8_t* data;
+} PQCodes;
+
+static inline int pq_codes_load(const char* path, PQCodes* pq_codes) 
+{
+    // Setting up encoding codes file stram
+    FILE* encodings_file = fopen(path, "rb");
+    if (encodings_file == NULL) {
+        perror("pq_codes_load: fopen");
+        return -1;
+    }
+
+    // Reading magic bytes
+    uint32_t magic;
+    if (fread(&magic, sizeof(uint32_t), 1, encodings_file) != 1 || magic != PQ_MAGIC) {
+        fprintf(stderr, "pq_codes_load: bad magic bytes in %s\n", path); 
+        fclose(encodings_file); 
+        return -1;
+    }
+
+    // Reading encodings metadata
+    if (fread(&pq_codes->n_points, sizeof(uint32_t), 1, encodings_file) != 1 ||
+        fread(&pq_codes->M, sizeof(uint32_t), 1, encodings_file) != 1 ||
+        fread(&pq_codes->codebook_hash, sizeof(uint64_t), 1, encodings_file) != 1) 
+    {
+        fprintf(stderr, "pq_codes_load: header corrupted or not match expected format in %s\n", path);
+        fclose(encodings_file);
+        return -1;
+    }
+
+    // Reading actual data
+    size_t data_size = (size_t)pq_codes->n_points * pq_codes->M;
+    if (fread(pq_codes->data, 1, data_size, encodings_file) != data_size) {
+        fprintf(stderr, "pq_codes_load: encoding data loading problem in %s\n", path);
+        fclose(encodings_file); 
+        free(pq_codes->data); 
+        return -1;
+    }
+    fclose(encodings_file);
+
+    return 0;
+}
+
+// Check the hash to make sure the we are using the correct encoding scheme
+static inline int pq_codes_matches_codebook(const PQCodes* pq_codes, const PQCodebook* pq_codebook) 
+{
+    return (pq_codes->codebook_hash == pq_codebook->hash);
+}
+
+// Cleanup encoding instance
+static inline void pq_codes_free(PQCodes* pq_codes) 
+{
+    free(pq_codes->data);
+    pq_codes->data = NULL;
+}
+
+// PQ encoding data indexing
+static inline uint8_t* pq_codes_at(PQCodes* pq_codes, uint32_t point_id) 
+{
+    return &pq_codes->data[(size_t)point_id*pq_codes->M];
+}
+
 
 
 #endif /* PQ_H */
