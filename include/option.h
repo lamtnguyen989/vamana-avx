@@ -14,6 +14,7 @@
 #define OPTION_SOME(T, v)   ((Option_##T){ .has_value = 1, .value = (v) })
 #define OPTION_IS_SOME(opt) ((opt).has_value)
 #define OPTION_IS_NONE(opt) (!(opt).has_value)
+#define OPTION_UNWRAP(opt)  ((opt).value)
 #define OPTION_UNWRAP_OR(opt, default_val) ((opt).has_value ? (opt).value : (default_val))
 
 
