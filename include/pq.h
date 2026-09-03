@@ -168,7 +168,9 @@ static inline int pq_codebook_load(const char* path, PQCodebook *pq)
 
     // Populating codebook data in memory
     pq->sub_dim = pq->dim / pq->M;
+
     size_t n = (size_t)pq->M * pq->K * pq->sub_dim;
+    pq->centroids = (float*) malloc(n * sizeof(float));
     if (fread(pq->centroids, sizeof(float), n, codebook) != n) {
         fprintf(stderr, "pq_codebook_load: centroid data loading problem in %s\n", path);
         fclose(codebook); 
@@ -219,6 +221,7 @@ static inline int pq_codes_load(const char* path, PQCodes* pq_codes)
 
     // Reading actual data
     size_t data_size = (size_t)pq_codes->n_points * pq_codes->M;
+    pq_codes->data = (uint8_t*) malloc(data_size);
     if (fread(pq_codes->data, 1, data_size, encodings_file) != data_size) {
         fprintf(stderr, "pq_codes_load: encoding data loading problem in %s\n", path);
         fclose(encodings_file); 

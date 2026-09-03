@@ -46,9 +46,15 @@ int main(int argc, char** argv)
 
     // Encode (note encodings are parallelizable between points)
     uint8_t *codes = (uint8_t *)malloc((size_t)vf.num_vectors * pq.M);
+    if (!codes) {
+        fprintf(stderr, "Error: Memory allocation failed for %zu bytes\n", (size_t)vf.num_vectors * pq.M);
+        pq_codebook_free(&pq);
+        vecfile_free(&vf);
+        return 1;
+    }
 
     omp_set_num_threads(num_threads);
-    #pragma parallel for schedule(dynamic)
+    #pragma omp parallel for
     for (size_t k = 0; k < vf.num_vectors; k++) {
         pq_encode(&pq, dist_fn, vecfile_data_at(&vf, k), &codes[k * pq.M]);
     }
