@@ -4,7 +4,7 @@ From-scratch implementation Vamana vector search algorithm (more specifically [D
 
 ## Checklist
 - [x] Doing metric computations with SIMD extensions.
-- [x] Creating a custom (and simple) data serialization of `.vecf` (again, this is not an established format, but just our own random one)
+- [x] Creating a custom (and simple) data serialization of `.vecf` (again, this is not an established format, but just our own one)
     - [x] Make our own data generator and serialize it to `.vecf`
     - [x] Make a `.vecf` data sharding for encoding purposes.
 - [x] Creating our own custom [product quantization](https://towardsdatascience.com/similarity-search-product-quantization-b2a1a6397701/) (of FP32s) scheme and codebooks (serialized format extensions of `.pqbook` for codebooks and `.pqbin` for encodings)

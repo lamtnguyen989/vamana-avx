@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <liburing.h>
 
+#include "index_format.h"
 
 #define URING_QUEUE_DEPTH 128
 
