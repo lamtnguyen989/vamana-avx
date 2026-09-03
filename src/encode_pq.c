@@ -76,9 +76,7 @@ int main(int argc, char** argv)
     // Notify the writes quantities
     size_t codes_bytes = (size_t)vf.num_vectors * pq.M;
     size_t full_bytes = (size_t)vf.num_vectors * vf.dim * sizeof(float);
-    printf("Wrote %s: %u points x %u bytes = %zu bytes (vs %zu bytes full-precision, %.1fx smaller), hash=%016llx\n",
-            codes_path, vf.num_vectors, pq.M, codes_bytes, full_bytes, (double)full_bytes / codes_bytes,
-            (unsigned long long)pq.hash);
+    printf("Wrote %s,  hash=%016llx\n", codes_path, (unsigned long long)pq.hash);
 
     // Cleanups
     free(codes);

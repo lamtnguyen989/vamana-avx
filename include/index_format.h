@@ -102,11 +102,11 @@ static inline int insert_candidate(CandidateList *list, uint32_t id, float dista
     return 1;
 }
 
-static inline uint32_t next_unvisted_candidates(CandidateList* list, uint32_t* out_indices, uint32_t max_out) {
+static inline uint32_t next_unvisted_candidates(CandidateList* list, uint32_t* candidate_indices, uint32_t max_count) {
     uint32_t count = 0;
-    for (uint32_t i = 0; i < list->size && count < max_out; i++) {
+    for (uint32_t i = 0; i < list->size && count < max_count; i++) {
         if (!list->items[i].visited) {
-            out_indices[count++] = i;
+            candidate_indices[count++] = i;
         }
     }
     return count;
