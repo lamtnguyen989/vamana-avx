@@ -65,12 +65,14 @@ static inline void pq_build_distance_table(const PQCodebook* pq, dist_fn_t dista
 }
 
 // ADC distances
-static inline void pq_adc_distances(const PQCodebook* pq, float* adc_table, uint8_t* codes) 
+static inline float pq_adc_distances(const PQCodebook* pq, float* adc_table, uint8_t* codes) 
 {
     float result = 0.0f;
     for (size_t m = 0; m < pq->M; m++) {
         result += adc_table[m * pq->K + codes[m]];
     }
+
+    return result;
 }
 
 // Cleanups
