@@ -11,14 +11,14 @@
 #include "index_format.h"
 #include "vecfile.h"
 
-/* Neighbors List */
+/* Neighbors graph (represented as adjacency list) */
 typedef struct {
     uint32_t* ids;
     uint32_t count;
     uint32_t cap;
-} NeighborList;
+} Neighbors;
 
-static void neighbor_list_push(NeighborList* list, uint32_t id)
+static void neighbor_push(Neighbors* list, uint32_t id)
 {
     // Rejecting duplicates
     for (uint32_t k = 0; k < list->count; k++) {
@@ -69,9 +69,35 @@ static uint32_t find_medoid(VecFile* file, dist_fn_t dist_fn) {
     return best_index;
 }
 
-static void greedy_search()
+static void greedy_beam_search(VecFile* vf, Neighbors* graph, dist_fn_t dist_fn, 
+                        uint32_t start_id, uint32_t beam_width, 
+                        const float* query, CandidateList* candidates)
 {
+    /* Initialize the candidates list */
+    insert_candidate(candidates, start_id, dist_fn(query, vecfile_data_at(vf, start_id), vf->dim));
 
+    /* Process upto `beam_width` unvisited candidates per steps */
+    uint32_t* batch_index = (uint32_t*) malloc(beam_width*sizeof(uint32_t));
+    uint32_t batch_count = 0;
+
+    while ((batch_count = next_unvisted_candidates(candidates, batch_index, beam_width)) > 0) {
+        
+        for (uint32_t b = 0; b < batch_count; b++) {
+            // Mark candidates in current batch as visited
+            candidates->items[batch_index[b]].visited = 1;
+            
+            // Collect, evaluate and try insert all neighbors across the batch
+            uint32_t curr_id = candidates->items[batch_index[b]].id;
+            Neighbors* neighbors = &graph[curr_id];
+            for (uint32_t k = 0; k < neighbors->count; k++) {
+                uint32_t nb_id = neighbors->ids[k];
+                insert_candidate(candidates, nb_id, dist_fn(query, vecfile_data_at(vf, nb_id), vf->dim));
+            }
+        }
+    }
+
+    // Cleanups
+    free(batch_index);
 }
 
 static void robust_prune()

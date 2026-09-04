@@ -62,7 +62,7 @@ static inline void candidate_list_free(CandidateList *list)
 
 // Insert candidate into the list, sorted by ascending distance
 // Returns 1 for success (true) and 0 (false) for fail 
-static inline int insert_candidate(CandidateList *list, uint32_t id, float distance)
+static inline int insert_candidate(CandidateList* list, uint32_t id, float distance)
 {
     /* Rejection checks */
     // Check if the id is already present
