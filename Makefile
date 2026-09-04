@@ -51,6 +51,11 @@ search: $(SRC_DIR)/search.c
 	mkdir -p $(BUILD_DIR)
 	$(CC) $(CFLAGS) -I$(INCLUDE_DIR) $< -o $(BUILD_DIR)/$@ $(LINK_FLAG) -luring $(METRIC_IMPL)
 
+# Building index
+build_index: $(SRC_DIR)/build_index.c
+	mkdir -p $(BUILD_DIR)
+	$(CC) $(CFLAGS) -I$(INCLUDE_DIR) $< -o $(BUILD_DIR)/$@ $(LINK_FLAG) $(METRIC_IMPL)
+
 
 clean:
 	rm -rf $(BUILD_DIR)

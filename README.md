@@ -10,9 +10,10 @@ From-scratch implementation Vamana vector search algorithm (more specifically [D
 - [x] Creating our own custom [product quantization](https://towardsdatascience.com/similarity-search-product-quantization-b2a1a6397701/) (of FP32s) scheme and codebooks (serialized format extensions of `.pqbook` for codebooks and `.pqbin` for encodings)
 - [x] Make our own PQ codebook training algorithm.
 - [x] Encode data shards using trained codebooks.
-- [] Create indexing format to be used for searching.
-- [] Writing a (distributed) Vamana graph search algorithm on our custom data (MPI, OpenMP alongside `io_uring` for beam width batch and reranking).
-- [] (Optional) Observe the searching program with eBPF through Rust Aya.
+- [x] Create indexing formats to be used for searching.
+- [ ] Building index for Vamana graph search
+- [ ] Writing a (distributed) Vamana graph search algorithm on our custom data (MPI, OpenMP alongside `io_uring` for beam width batch and reranking).
+- [ ] (Optional) Observe the searching program with eBPF through Rust Aya.
 
 ## Current pipeline 
 ```bash
