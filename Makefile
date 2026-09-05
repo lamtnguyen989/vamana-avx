@@ -48,6 +48,7 @@ encode: $(SRC_DIR)/encode_pq.c
 
 # Searching binary
 search: $(SRC_DIR)/search.c
+	$(SETUP_SPACK)
 	mkdir -p $(BUILD_DIR)
 	$(CC) $(CFLAGS) -I$(INCLUDE_DIR) $< -o $(BUILD_DIR)/$@ $(LINK_FLAG) -luring $(METRIC_IMPL)
 

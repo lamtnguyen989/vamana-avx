@@ -7,12 +7,14 @@ From-scratch implementation Vamana vector search algorithm (more specifically [D
 - [x] Creating a custom (and simple) data serialization of `.vecf` (again, this is not an established format, but just our own one)
     - [x] Make our own data generator and serialize it to `.vecf`
     - [x] Make a `.vecf` data sharding for encoding purposes.
+- [ ] Create ground truths on the generated datasets for benchmarking.
 - [x] Creating our own custom [product quantization](https://towardsdatascience.com/similarity-search-product-quantization-b2a1a6397701/) (of FP32s) scheme and codebooks (serialized format extensions of `.pqbook` for codebooks and `.pqbin` for encodings)
 - [x] Make our own PQ codebook training algorithm.
 - [x] Encode data shards using trained codebooks.
 - [x] Create indexing formats to be used for searching.
 - [x] Building index for Vamana graph search.
 - [ ] Writing a (distributed) Vamana graph search algorithm on our custom data (MPI, OpenMP alongside `io_uring` for beam width batch and reranking).
+- [ ] Benchmark the pipeline's _recall@k_ scores.
 - [ ] (Optional) Observe the searching program with eBPF through Rust Aya.
 
 ## Current pipeline 
@@ -27,7 +29,7 @@ From-scratch implementation Vamana vector search algorithm (more specifically [D
 ./scripts/encode_shards.sh data/shards/ data/shards/pq_codebook.pqbook
 
 # Build data graph index (on the shards)
-./scripts/build_index.sh data/shards data/index 32 64 1.20 4 69
+./scripts/build_index.sh data/shards data/index
 
 # Search (TODO)
 ```
