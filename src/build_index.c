@@ -144,13 +144,13 @@ static void robust_prune(VecFile* vf, dist_fn_t dist_fn, uint32_t base_id,
             continue;
 
         out_ids[count++] = candidates[k].id;
+        float* vec1 = vecfile_data_at(vf, candidates[k].id);
         for (uint32_t j = 0; j < n; j++) {
             if (!alive[j])
                 continue;
             
-            float dist = dist_fn(vecfile_data_at(vf, candidates[k].id), 
-                                vecfile_data_at(vf, candidates[j].id),
-                                vf->dim);
+            float* vec2 = vecfile_data_at(vf, candidates[j].id);
+            float dist = dist_fn(vec1, vec2, vf->dim);
 
             if (alpha*dist <= candidates[j].dist) {
                 alive[j] = 0;
@@ -218,8 +218,9 @@ int main(int argc, char** argv)
     uint32_t R = argc > 3 ? (uint32_t) atoi(argv[3]) : 32;
     uint32_t L = argc > 4 ? (uint32_t) atoi(argv[4]) : 64;
     float alpha = argc > 5 ? (float) atof(argv[5]) : 1.20;
-    OPTION(uint32_t) seed_opt = argc > 6
-        ? OPTION_SOME(uint32_t, (uint32_t)strtoul(argv[6], NULL, 10))
+    uint32_t n_threads = argc > 6 ? (float) atof(argv[6]) : 4;
+    OPTION(uint32_t) seed_opt = argc > 7
+        ? OPTION_SOME(uint32_t, (uint32_t)strtoul(argv[7], NULL, 10))
         : OPTION_NONE(uint32_t);
 
     // Load vectors
