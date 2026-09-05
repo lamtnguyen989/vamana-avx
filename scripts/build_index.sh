@@ -12,6 +12,8 @@ THREADS="${6:-4}"
 SEED="$7"
 BUILD_BIN="$(dirname "$0")/../build/build_index"
 
+mkdir -p $INDEX_DIR
+
 pids=()
 for f in "$SHARD_DIR"/shard_*.vecf; do
     n=$(basename "$f" .vecf | sed 's/shard_//')

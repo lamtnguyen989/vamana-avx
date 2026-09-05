@@ -29,7 +29,7 @@ From-scratch implementation Vamana vector search algorithm (more specifically [D
 ./scripts/encode_shards.sh data/shards/ data/shards/pq_codebook.pqbook data/shards/encodings
 
 # Build data graph index (on the shards)
-./scripts/build_index.sh data/shards data/index
+./scripts/build_index.sh data/shards data/shards/index
 
 # Search (TODO)
 ```

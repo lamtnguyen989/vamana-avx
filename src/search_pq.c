@@ -58,18 +58,20 @@ int main(int argc, char** argv)
         if (rank == 0) {
             fprintf(stderr,
                 "Usage: mpirun -n <ranks> %s <queries.vecf> <K> <index_dir/> <codebook.pqbook> <pq_encoding_dir/> "
-                "[threads_per_rank=4] \n"
+                "[L=64] [beam_width=8] [threads_per_rank=4] \n"
                 "\n"
-                "  queries.vecf         Queries to be given to the dataset.\n"
+                "  queries.vecf         Queries for search in the dataset.\n"
                 "  K                    Number of top ranked choices.\n"
                 "  index_dir/           Directory of Vamana graph index.\n"
                 "  codebook.pqbook      Product quantization codebook file.\n"
                 "  pq_encoding_dir/     Product quantization encodings directory (of data shards).\n"
+                "  L                    Search candidate list size (default: 64)\n"
+                "  beam_width           Batch-size for beam search (default: 8)\n"
                 "  threads_per_rank     CPU threads per MPI rank (default: 4)\n"
                 "\n"
                 , argv[0]);
+            MPI_Finalize();
         }
-        MPI_Finalize();
         return 1;
     }
 
