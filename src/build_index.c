@@ -15,6 +15,13 @@
 
 DEFINE_OPTION(uint32_t);
 
+#define SWAP(a, b)              \
+    do {                        \
+        typeof(a) _tmp = (a);   \
+        (a) = (b);              \
+        (b) = _tmp;             \
+    } while (0);
+
 /* Neighbors graph (represented as adjacency list) */
 typedef struct {
     uint32_t* ids;
@@ -38,6 +45,23 @@ static void neighbor_push(Neighbors* list, uint32_t id)
 
     // Add the id of neighbor to the list
     list->ids[list->count++] = id;
+}
+
+static void neighbors_init(Neighbors* list, uint32_t cap) 
+{
+    uint32_t capacity = cap;
+    if (cap == 0) {
+        #if defined (DEBUG)
+            fprintf(stderr, "Capacity can not be zero, default capacity to 32");
+        #endif
+        capacity = 32;
+    }
+
+    *list = (Neighbors) {
+        .ids = (uint32_t*) malloc(capacity*sizeof(uint32_t)),
+        .count = 0,
+        .cap = capacity,
+    };
 }
 
 // Medoid finder (technically not a true one but more like centroid-closest vector heuristic approximation)
@@ -143,6 +167,15 @@ static void robust_prune(VecFile* vf, dist_fn_t dist_fn, uint32_t base_id,
     free(alive);
 }
 
+static void shuffle(uint32_t* arr, uint32_t n, OPTION(uint32_t) seed_opt)
+{
+    if (OPTION_IS_SOME(seed_opt)) {srand(OPTION_UNWRAP(seed_opt));}
+
+    for (uint32_t k = 0; k < n; k++) {
+        uint32_t rand_idx = rand() % (k+1);
+        SWAP(arr[k], arr[rand_idx]);
+    }
+}
 
 int main(int argc, char** argv) 
 {
@@ -163,9 +196,70 @@ int main(int argc, char** argv)
     const char* index_path = argv[2];
     uint32_t R = argc > 3 ? (uint32_t) atoi(argv[3]) : 32;
     uint32_t L = argc > 4 ? (uint32_t) atoi(argv[4]) : 64;
-    OPTION(uint32_t) seed_opt = argc > 5
+    float alpha = argc > 5 ? (float) atof(argv[5]) : 1.20;
+    OPTION(uint32_t) seed_opt = argc > 6
         ? OPTION_SOME(uint32_t, (uint32_t)strtoul(argv[8], NULL, 10))
         : OPTION_NONE(uint32_t);
+
+    // Load vectors
+    VecFile vf;
+    if (vecfile_load(vec_path, &vf) != 0) {
+        fprintf(stderr, "Error loading data at %s", vec_path);
+        return -1;
+    }
+
+    // Initialize metric
+    dist_fn_t dist_fn = metric();
+
+    // Initialize index graph
+    Neighbors* graph = (Neighbors*) malloc(vf.num_vectors * sizeof(Neighbors));
+    for (uint32_t k = 0; k < vf.num_vectors; k++) {
+        neighbors_init(&graph[k], R + 4);
+    }
+
+    // Notify initializations metadata
+    printf("Data indexing with %u vectors, dim=%u, R=%u, L=%u, alpha=%.2f\n",
+            vf.num_vectors, vf.dim, R, L, alpha);
+
+
+    // Find medoid
+    uint32_t medoid = find_medoid(&vf, dist_fn);
+    printf("Medoid at: %u\n", medoid);
+
+    // Shuffle data to avoid bias
+    uint32_t* shuffle_order = (uint32_t*) malloc(vf.num_vectors*sizeof(uint32_t));
+    for (size_t k = 0; k < vf.num_vectors; k++) {shuffle_order[k] = k;}
+    shuffle(shuffle_order, vf.num_vectors, seed_opt);
+
+    // Building index
+    uint32_t* out_ids = (uint32_t*) malloc(R * sizeof(uint32_t));
+    for (uint32_t idx = 0; idx < vf.num_vectors; idx++) {
+        uint32_t base_id = shuffle_order[idx];
+
+        // Building candidates list and greedy search
+        CandidateList candidates;
+        candidate_list_init(&candidates, L);
+        greedy_search(&vf, graph, dist_fn, medoid, vecfile_data_at(&vf, base_id), &candidates);
+
+        // Pruning
+        uint32_t out_count = 0;
+        robust_prune(&vf, dist_fn, base_id, candidates.items, candidates.size, R, alpha, out_ids, &out_count);
+        candidate_list_free(&candidates);
+
+        // Pushing neighbors
+        graph[base_id].count = 0;
+        for (uint32_t k = 0; k < out_count; k++) {
+            neighbor_push(&graph[base_id], out_ids[k]);
+        }
+    }
+
+
+    // Cleanups
+    free(shuffle_order);
+    free(out_ids);
+    for (uint32_t k = 0; k < vf.num_vectors; k++) free(graph[k].ids);
+    free(graph);
+    vecfile_free(&vf);
 
     return 0;
 }
