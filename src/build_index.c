@@ -8,6 +8,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <omp.h>
+#include <time.h>
 
 #include "distance.h"
 #include "index_format.h"
@@ -290,13 +291,14 @@ int main(int argc, char** argv)
     shuffle(shuffle_order, vf.num_vectors, seed_opt);
 
     // Building index
+    time_t t0 = time(NULL);
     #pragma omp parallel num_threads(n_threads)
     {
         uint32_t* out_ids = (uint32_t*) malloc(R * sizeof(uint32_t));
         Candidate* scratch = (Candidate *)malloc((L + R + 1) * sizeof(Candidate));  // Scratch buffer for re-pruning overflowed nodes
         uint32_t* nbr_scratch = (uint32_t*) malloc(R*sizeof(uint32_t)); // Local neighbor id scratch
 
-        #pragma omp parallel num_threads(n_threads)
+        #pragma omp for schedule(dynamic)
         for (uint32_t idx = 0; idx < vf.num_vectors; idx++) {
             uint32_t base_id = shuffle_order[idx];
 
@@ -339,7 +341,7 @@ int main(int argc, char** argv)
                     free(new_ids);
                 }
                 // Release lock
-                omp_set_lock(&locks[out_ids[k]]);
+                omp_unset_lock(&locks[out_ids[k]]);
             }
         }
 
@@ -348,6 +350,7 @@ int main(int argc, char** argv)
         free(scratch);
         free(out_ids);
     }
+    printf("Done with building index, took %lds. Now serializing...\n", time(NULL) - t0);
 
     // Cleanup locks before serializing since everything is serial from here
     for (uint32_t k = 0; k < vf.num_vectors; k++) {omp_destroy_lock(&locks[k]);}
