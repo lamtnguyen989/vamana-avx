@@ -66,13 +66,14 @@ static void neighbors_init(Neighbors* list, uint32_t cap)
 }
 
 // Medoid finder (technically not a true one but more like centroid-closest vector heuristic approximation)
-static uint32_t find_medoid(VecFile* file, dist_fn_t dist_fn) {
+static uint32_t find_medoid(VecFile* file, dist_fn_t dist_fn, int n_threads) {
     // Extracting file (dataset space) metadata
     uint32_t dim = file->dim;
     uint32_t n_vectors = file->num_vectors;
 
     // Calculate the centroid
     float* centroid = (float *)calloc(dim, sizeof(float));
+    #pragma omp parallel for num_threads(n_threads) reduction(+:centroid[:dim])
     for (uint32_t k = 0; k < n_vectors; k++) {
         float* vector = vecfile_data_at(file, k);
         for (uint32_t d = 0; d < dim; d++) {
@@ -86,11 +87,25 @@ static uint32_t find_medoid(VecFile* file, dist_fn_t dist_fn) {
     // Find the closest vector to the centroid
     float best_dist = FLT_MAX;
     uint32_t best_index = 0;
-    for (uint32_t k = 0; k < n_vectors; k++) {
-        float dist = dist_fn(vecfile_data_at(file, k), centroid, dim);
-        if (dist < best_dist) {
-            best_dist = dist;
-            best_index = k;
+    #pragma omp parallel num_threads(n_threads)
+    {
+        uint32_t local_best_idx = 0;
+        float local_best_dist = FLT_MAX;
+
+        #pragma omp for nowait
+        for (uint32_t k = 0; k < n_vectors; k++) {
+            float dist = dist_fn(vecfile_data_at(file, k), centroid, dim);
+            if (dist < local_best_dist) {
+                local_best_dist = dist;
+                local_best_idx = k;
+            }
+        }
+        #pragma omp critical
+        {
+            if (local_best_dist < best_dist) {
+                best_dist = local_best_dist;
+                best_index = local_best_idx;
+            }
         }
     }
 
@@ -245,7 +260,7 @@ int main(int argc, char** argv)
 
 
     // Find medoid
-    uint32_t medoid = find_medoid(&vf, dist_fn);
+    uint32_t medoid = find_medoid(&vf, dist_fn, n_threads);
     printf("Medoid at: %u\n", medoid);
 
     // Shuffle data to avoid bias
