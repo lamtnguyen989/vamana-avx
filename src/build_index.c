@@ -113,8 +113,25 @@ static uint32_t find_medoid(VecFile* file, dist_fn_t dist_fn, int n_threads) {
     return best_index;
 }
 
-static void greedy_search(VecFile* vf, Neighbors* graph, dist_fn_t dist_fn, 
-                        uint32_t start_id, const float* query, CandidateList* candidates)
+static uint32_t snapshot_neighbors(Neighbors* graph, omp_lock_t* locks, uint32_t node_id, uint32_t* out_snapshot)
+{
+    omp_set_lock(&locks[node_id]);
+    uint32_t count = graph[node_id].count;
+    memcpy(out_snapshot, graph[node_id].ids, count*sizeof(uint32_t));
+    omp_unset_lock(&locks[node_id]);
+    
+    return count;
+}
+
+// Greedy search
+static void greedy_search(VecFile* vf, 
+                        Neighbors* graph, 
+                        dist_fn_t dist_fn, 
+                        uint32_t start_id, 
+                        const float* query,
+                        omp_lock_t* locks, 
+                        uint32_t* nbr_idx_snapshot,
+                        CandidateList* candidates)
 {
     /* Initialize the candidates list */
     insert_candidate(candidates, start_id, dist_fn(query, vecfile_data_at(vf, start_id), vf->dim));
@@ -127,9 +144,9 @@ static void greedy_search(VecFile* vf, Neighbors* graph, dist_fn_t dist_fn,
         candidates->items[candidate_idx].visited = 1;
 
         // Try insert to the candidate list
-        Neighbors* nb = &graph[cur_idx];
-        for (uint32_t k = 0; k < nb->count; k++) {
-            uint32_t nb_id = nb->ids[k];
+        uint32_t degree = snapshot_neighbors(graph, locks, cur_idx, nbr_idx_snapshot);
+        for (uint32_t k = 0; k < degree; k++) {
+            uint32_t nb_id = nbr_idx_snapshot[k];
             float d = dist_fn(vecfile_data_at(vf, nb_id), query, vf->dim);
             insert_candidate(candidates, nb_id, d);
         }
@@ -213,6 +230,8 @@ static void candidates_from_neighbors(const VecFile* vf, dist_fn_t dist_fn,
     }
 }
 
+
+
 int main(int argc, char** argv) 
 {
     // CLI parsing
@@ -248,10 +267,12 @@ int main(int argc, char** argv)
     // Initialize metric
     dist_fn_t dist_fn = metric();
 
-    // Initialize index graph
+    // Initialize index graph and also OpenMP locks
     Neighbors* graph = (Neighbors*) malloc(vf.num_vectors * sizeof(Neighbors));
+    omp_lock_t* locks = (omp_lock_t*) malloc(vf.num_vectors * sizeof(omp_lock_t));
     for (uint32_t k = 0; k < vf.num_vectors; k++) {
         neighbors_init(&graph[k], R + 4);
+        omp_init_lock(&locks[k]);
     }
 
     // Notify initializations metadata
@@ -269,47 +290,68 @@ int main(int argc, char** argv)
     shuffle(shuffle_order, vf.num_vectors, seed_opt);
 
     // Building index
-    uint32_t* out_ids = (uint32_t*) malloc(R * sizeof(uint32_t));
-    Candidate* scratch = (Candidate *)malloc((L + R + 1) * sizeof(Candidate));  // Scratch buffer for re-pruning overflowed nodes
-    for (uint32_t idx = 0; idx < vf.num_vectors; idx++) {
-        uint32_t base_id = shuffle_order[idx];
+    #pragma omp parallel num_threads(n_threads)
+    {
+        uint32_t* out_ids = (uint32_t*) malloc(R * sizeof(uint32_t));
+        Candidate* scratch = (Candidate *)malloc((L + R + 1) * sizeof(Candidate));  // Scratch buffer for re-pruning overflowed nodes
+        uint32_t* nbr_scratch = (uint32_t*) malloc(R*sizeof(uint32_t)); // Local neighbor id scratch
 
-        // Building candidates list and greedy search
-        CandidateList candidates;
-        candidate_list_init(&candidates, L);
-        greedy_search(&vf, graph, dist_fn, medoid, vecfile_data_at(&vf, base_id), &candidates);
+        #pragma omp parallel num_threads(n_threads)
+        for (uint32_t idx = 0; idx < vf.num_vectors; idx++) {
+            uint32_t base_id = shuffle_order[idx];
 
-        // Pruning
-        uint32_t out_count = 0;
-        robust_prune(&vf, dist_fn, base_id, candidates.items, candidates.size, R, alpha, out_ids, &out_count);
-        candidate_list_free(&candidates);
+            // Building candidates list and greedy search
+            CandidateList candidates;
+            candidate_list_init(&candidates, L);
+            greedy_search(&vf, graph, dist_fn, medoid, vecfile_data_at(&vf, base_id), locks, nbr_scratch, &candidates);
 
-        // Pushing neighbors
-        graph[base_id].count = 0;
-        for (uint32_t k = 0; k < out_count; k++) {
-            neighbor_push(&graph[base_id], out_ids[k]);
-        }
+            // Pruning
+            uint32_t out_count = 0;
+            robust_prune(&vf, dist_fn, base_id, candidates.items, candidates.size, R, alpha, out_ids, &out_count);
+            candidate_list_free(&candidates);
 
-        // Reverse edges and prune nodes that has more than R neighbors
-        for (uint32_t k =0; k< out_count; k++) {
-            // Reversing edges
-            neighbor_push(&graph[out_ids[k]], base_id);
-            
-            // Re-deriving candidate list and prune for nodes has more than R neighbors
-            if (graph[out_ids[k]].count > R) {
-                candidates_from_neighbors(&vf, dist_fn, out_ids[k], &graph[out_ids[k]], scratch);
-                uint32_t new_count = 0;
-                uint32_t* new_ids = (uint32_t*) malloc(R * sizeof(uint32_t));
-                robust_prune(&vf, dist_fn, out_ids[k], scratch, graph[out_ids[k]].count, R, alpha, new_ids, &new_count);
-                graph[out_ids[k]].count = 0;
-                for (uint32_t j = 0; j < new_count; j++) {
-                    neighbor_push(&graph[out_ids[k]], new_ids[j]);
-                }
-                free(new_ids);
+            // Pushing neighbors (note critical writes)
+            omp_set_lock(&locks[base_id]);
+            graph[base_id].count = 0;
+            for (uint32_t k = 0; k < out_count; k++) {
+                neighbor_push(&graph[base_id], out_ids[k]);
             }
+            omp_unset_lock(&locks[base_id]);
 
+            // Reverse edges and prune nodes that has more than R neighbors (every iteration is critical writes)
+            for (uint32_t k =0; k< out_count; k++) {
+                // Acquire lock
+                omp_set_lock(&locks[out_ids[k]]);
+
+                // Reversing edges
+                neighbor_push(&graph[out_ids[k]], base_id);
+                
+                // Re-deriving candidate list and prune for nodes has more than R neighbors
+                if (graph[out_ids[k]].count > R) {
+                    candidates_from_neighbors(&vf, dist_fn, out_ids[k], &graph[out_ids[k]], scratch);
+                    uint32_t new_count = 0;
+                    uint32_t* new_ids = (uint32_t*) malloc(R * sizeof(uint32_t));
+                    robust_prune(&vf, dist_fn, out_ids[k], scratch, graph[out_ids[k]].count, R, alpha, new_ids, &new_count);
+                    graph[out_ids[k]].count = 0;
+                    for (uint32_t j = 0; j < new_count; j++) {
+                        neighbor_push(&graph[out_ids[k]], new_ids[j]);
+                    }
+                    free(new_ids);
+                }
+                // Release lock
+                omp_set_lock(&locks[out_ids[k]]);
+            }
         }
+
+        // Cleanup thread-local scratch space
+        free(nbr_scratch);
+        free(scratch);
+        free(out_ids);
     }
+
+    // Cleanup locks before serializing since everything is serial from here
+    for (uint32_t k = 0; k < vf.num_vectors; k++) {omp_destroy_lock(&locks[k]);}
+    free(locks);
 
     /* Serialize index */
     // Open serialization file stream
@@ -348,8 +390,6 @@ int main(int argc, char** argv)
 
     /* Cleanups */
     free(shuffle_order);
-    free(out_ids);
-    free(scratch);
     for (uint32_t k = 0; k < vf.num_vectors; k++) {free(graph[k].ids);}
     free(graph);
     fclose(serialized_index_file);
