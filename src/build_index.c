@@ -286,7 +286,7 @@ int main(int argc, char** argv)
             
             // Re-deriving candidate list and prune for nodes has more than R neighbors
             if (graph[base_id].count > R) {
-                candidates_from_neighbors(&vf, dist_fn, out_ids[k], &graph[base_id], scratch);
+                candidates_from_neighbors(&vf, dist_fn, out_ids[k], &graph[out_ids[k]], scratch);
                 uint32_t new_count = 0;
                 uint32_t* new_ids = (uint32_t*) malloc(R * sizeof(uint32_t));
                 robust_prune(&vf, dist_fn, out_ids[k], scratch, graph[out_ids[k]].count, R, alpha, new_ids, &new_count);
@@ -300,13 +300,46 @@ int main(int argc, char** argv)
         }
     }
 
+    /* Serialize index */
+    // Open serialization file stream
+    FILE* serialized_index_file = fopen(index_path, "wb");
+    if (serialized_index_file == NULL) {
+        perror("Fail to open index serialization file.\n");
+        fclose(serialized_index_file);
+        return 1;
+    }
 
-    // Cleanups
+    // Writing index header
+    IndexHeader hdr = {
+        .n_points = vf.num_vectors,
+        .dim = vf.dim,
+        .R = R,
+        .medoid_id = medoid,
+    };
+    fwrite(&hdr, sizeof(IndexHeader), 1, serialized_index_file);
+
+    // Writing index record
+    uint32_t* neighbor_buf = (uint32_t*) malloc(R * sizeof(uint32_t));
+    for (uint32_t k = 0; k < vf.num_vectors; k++) {
+        // Writing vector point
+        fwrite(vecfile_data_at(&vf, k), sizeof(float), vf.dim, serialized_index_file);
+        // Writing point graph degree
+        uint32_t degree = graph[k].count;
+        fwrite(&degree, sizeof(uint32_t), 1, serialized_index_file);
+        // Writing point neighbors
+        memset(neighbor_buf, 0, R*sizeof(uint32_t));
+        memcpy(neighbor_buf, graph[k].ids, degree * sizeof(uint32_t));
+        fwrite(neighbor_buf, sizeof(uint32_t), R, serialized_index_file);
+    }
+
+    /* Cleanups */
     free(shuffle_order);
     free(out_ids);
     free(scratch);
     for (uint32_t k = 0; k < vf.num_vectors; k++) free(graph[k].ids);
     free(graph);
+    fclose(serialized_index_file);
+    free(neighbor_buf);
     vecfile_free(&vf);
 
     return 0;
