@@ -11,7 +11,7 @@ From-scratch implementation Vamana vector search algorithm (more specifically [D
 - [x] Make our own PQ codebook training algorithm.
 - [x] Encode data shards using trained codebooks.
 - [x] Create indexing formats to be used for searching.
-- [ ] Building index for Vamana graph search
+- [x] Building index for Vamana graph search.
 - [ ] Writing a (distributed) Vamana graph search algorithm on our custom data (MPI, OpenMP alongside `io_uring` for beam width batch and reranking).
 - [ ] (Optional) Observe the searching program with eBPF through Rust Aya.
 
@@ -26,5 +26,8 @@ From-scratch implementation Vamana vector search algorithm (more specifically [D
 # Encode the data shards using the trained codebook (note the hard-codings in the scripts)
 ./scripts/encode_shards.sh data/shards/ data/shards/pq_codebook.pqbook
 
-# Build index and search (TODO)
+# Build data graph index (on the shards)
+./scripts/build_index.sh data/shards data/index 32 64 1.20 4 69
+
+# Search (TODO)
 ```

@@ -1,5 +1,5 @@
 # Compiling information
-CFLAGS  ?= -O3 -flto -march=native
+CFLAGS  ?= -O3 -flto -march=native -mtune=native
 LINK_FLAG = -lm -fopenmp
 SRC_DIR = src
 BUILD_DIR = build
