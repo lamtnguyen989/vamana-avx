@@ -360,7 +360,10 @@ int main(int argc, char** argv)
     FILE* serialized_index_file = fopen(index_path, "wb");
     if (serialized_index_file == NULL) {
         perror("Fail to open index serialization file.\n");
-        fclose(serialized_index_file);
+        free(shuffle_order);
+        for (uint32_t k = 0; k < vf.num_vectors; k++) {free(graph[k].ids);}
+        free(graph);
+        vecfile_free(&vf);
         return 1;
     }
 

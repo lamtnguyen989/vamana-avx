@@ -1,5 +1,5 @@
 CompileFlags:
-  Add: [-xc, -std=c23, -Iinclude, -fopenmp]
+  Add: [-xc, -std=c23, -Iinclude/, -fopenmp]
 
 InlayHints:
   Enabled: No

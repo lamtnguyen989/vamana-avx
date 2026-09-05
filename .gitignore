@@ -1,3 +1,6 @@
 build/
 ignore/
 data/
+
+# Still can't fix clangd not go over and look at inlude folder so symlinks
+src/*.h

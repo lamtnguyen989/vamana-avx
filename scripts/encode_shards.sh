@@ -7,10 +7,13 @@ set -euo pipefail
 
 
 # Setting up background stuff
-SHARD_DIR="${1:?usage: encode_shards.sh <shard_dir> <codebook> [threads_per_shard=4]}"
-CODEBOOK="${2:?usage: encode_shards.sh <shard_dir> <codebook> [threads_per_shard=4]}"
+SHARD_DIR="${1:?usage: encode_shards.sh <shard_dir> <encoding_dir> <codebook> [threads_per_shard=4]}"
+CODEBOOK="${2:?usage: encode_shards.sh <shard_dir> <encoding_dir> <codebook> [threads_per_shard=4]}"
+ENCODING_DIR="${3:?usage: encode_shards.sh <shard_dir> <encoding_dir> <codebook> [threads_per_shard=4]}"
 THREADS="${3:-4}"
 ENCODER="$(dirname "$0")/../build/encode"
+
+mkdir -p $ENCODING_DIR
 
 # Checking codebooks
 if [ ! -f "$CODEBOOK" ]; then
@@ -22,7 +25,7 @@ fi
 pids=()
 for f in "$SHARD_DIR"/shard_*.vecf; do
     n=$(basename "$f" .vecf | sed 's/shard_//')
-    out="$SHARD_DIR/pq_codes_${n}.pqbin"
+    out="$ENCODING_DIR/pq_codes_${n}.pqbin"
     echo "Encoding shard $n -> $out"
     "$ENCODER" "$f" "$CODEBOOK" "$out" "$THREADS" &
     pids+=($!)

@@ -26,7 +26,7 @@ From-scratch implementation Vamana vector search algorithm (more specifically [D
 ./scripts/run_training.sh
 
 # Encode the data shards using the trained codebook (note the hard-codings in the scripts)
-./scripts/encode_shards.sh data/shards/ data/shards/pq_codebook.pqbook
+./scripts/encode_shards.sh data/shards/ data/shards/pq_codebook.pqbook data/shards/encodings
 
 # Build data graph index (on the shards)
 ./scripts/build_index.sh data/shards data/index
