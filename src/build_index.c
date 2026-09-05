@@ -160,7 +160,7 @@ static void robust_prune(VecFile* vf, dist_fn_t dist_fn, uint32_t base_id,
                         uint32_t* out_ids, uint32_t* out_count)
 {
     // Bookeeping for alive candidates
-    uint8_t* alive = (uint8_t*) malloc(n*sizeof(uint8_t));
+    uint8_t alive[n];
     memset(alive, 1, n);
 
     // Make sure we are not considering the base id due it haveing distance zero
@@ -192,7 +192,6 @@ static void robust_prune(VecFile* vf, dist_fn_t dist_fn, uint32_t base_id,
     }
 
     *out_count = count;
-    free(alive);
 }
 
 static void shuffle(uint32_t* arr, uint32_t n, OPTION(uint32_t) seed_opt)
@@ -389,7 +388,7 @@ int main(int argc, char** argv)
     }
 
     // Notify
-    printf("Finished indexing %s", vec_path);
+    printf("Finished indexing %s\n", vec_path);
 
     /* Cleanups */
     free(shuffle_order);
