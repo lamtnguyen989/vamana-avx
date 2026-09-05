@@ -236,7 +236,7 @@ int main(int argc, char** argv)
 {
     // CLI parsing
     if (argc < 3) {
-        fprintf(stderr, "usage: %s <vectors.vecf> <index.vecfidx> [R=32] [L=64] [alpha=1.2] [seed]\n"
+        fprintf(stderr, "usage: %s <vectors.vecf> <index.vamindx> [R=32] [L=64] [alpha=1.2] [seed]\n"
                         "\n"
                         "  vectors.vecf:        Indexing data (shard)\n"
                         "  index.vecfidx:       Output index file\n"
