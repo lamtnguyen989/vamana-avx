@@ -177,6 +177,32 @@ static void shuffle(uint32_t* arr, uint32_t n, OPTION(uint32_t) seed_opt)
     }
 }
 
+// Re-deriving candidates list from neighbors adjacency list
+static void candidates_from_neighbors(const VecFile* vf, dist_fn_t dist_fn, 
+                                    uint32_t pt_id, Neighbors* nb, Candidate* out)
+{
+    // Initialize the candidates
+    const float* pt = vecfile_data_at(vf, pt_id);
+    for (uint32_t k = 0; k < nb->count; k++) {
+        out[k] = (Candidate) {
+            .id = nb->ids[k],
+            .dist = dist_fn(pt, vecfile_data_at(vf, nb->ids[k]), vf->dim),
+            .visited = 0,
+        };
+    }
+
+    // Insertion sort by dist (list is small, bounded by R)
+    for (int k = 1; k < nb->count; k++) {
+        Candidate key = out[k];
+        int j = k - 1;
+        while (j >= 0 && out[j].dist > key.dist) { 
+            out[j + 1] = out[j];
+            j--; 
+        }
+        out[j + 1] = key;
+    }
+}
+
 int main(int argc, char** argv) 
 {
     // CLI parsing
@@ -233,6 +259,7 @@ int main(int argc, char** argv)
 
     // Building index
     uint32_t* out_ids = (uint32_t*) malloc(R * sizeof(uint32_t));
+    Candidate* scratch = (Candidate *)malloc((L + R + 1) * sizeof(Candidate));  // Scratch buffer for re-pruning overflowed nodes
     for (uint32_t idx = 0; idx < vf.num_vectors; idx++) {
         uint32_t base_id = shuffle_order[idx];
 
@@ -251,12 +278,33 @@ int main(int argc, char** argv)
         for (uint32_t k = 0; k < out_count; k++) {
             neighbor_push(&graph[base_id], out_ids[k]);
         }
+
+        // Reverse edges and prune nodes that has more than R neighbors
+        for (uint32_t k =0; k< out_count; k++) {
+            // Reversing edges
+            neighbor_push(&graph[out_ids[k]], base_id);
+            
+            // Re-deriving candidate list and prune for nodes has more than R neighbors
+            if (graph[base_id].count > R) {
+                candidates_from_neighbors(&vf, dist_fn, out_ids[k], &graph[base_id], scratch);
+                uint32_t new_count = 0;
+                uint32_t* new_ids = (uint32_t*) malloc(R * sizeof(uint32_t));
+                robust_prune(&vf, dist_fn, out_ids[k], scratch, graph[out_ids[k]].count, R, alpha, new_ids, &new_count);
+                graph[out_ids[k]].count = 0;
+                for (uint32_t j = 0; j < new_count; j++) {
+                    neighbor_push(&graph[out_ids[k]], new_ids[j]);
+                }
+                free(new_ids);
+            }
+
+        }
     }
 
 
     // Cleanups
     free(shuffle_order);
     free(out_ids);
+    free(scratch);
     for (uint32_t k = 0; k < vf.num_vectors; k++) free(graph[k].ids);
     free(graph);
     vecfile_free(&vf);
