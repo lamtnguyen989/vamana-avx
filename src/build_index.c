@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <omp.h>
 
 #include "distance.h"
 #include "index_format.h"
@@ -125,11 +126,6 @@ static void robust_prune(VecFile* vf, dist_fn_t dist_fn, uint32_t base_id,
                         Candidate* candidates, uint32_t n, uint32_t R, float alpha,
                         uint32_t* out_ids, uint32_t* out_count)
 {
-    // Purely gredy when alpha==1.0
-    if (alpha == 1.0) {
-        return;
-    }
-
     // Bookeeping for alive candidates
     uint8_t* alive = (uint8_t*) malloc(n*sizeof(uint8_t));
     memset(alive, 1, n);
@@ -148,7 +144,6 @@ static void robust_prune(VecFile* vf, dist_fn_t dist_fn, uint32_t base_id,
             continue;
 
         out_ids[count++] = candidates[k].id;
-        const float* vec = vecfile_data_at(vf, candidates[k].id);
         for (uint32_t j = 0; j < n; j++) {
             if (!alive[j])
                 continue;
@@ -224,7 +219,7 @@ int main(int argc, char** argv)
     uint32_t L = argc > 4 ? (uint32_t) atoi(argv[4]) : 64;
     float alpha = argc > 5 ? (float) atof(argv[5]) : 1.20;
     OPTION(uint32_t) seed_opt = argc > 6
-        ? OPTION_SOME(uint32_t, (uint32_t)strtoul(argv[8], NULL, 10))
+        ? OPTION_SOME(uint32_t, (uint32_t)strtoul(argv[6], NULL, 10))
         : OPTION_NONE(uint32_t);
 
     // Load vectors
@@ -285,7 +280,7 @@ int main(int argc, char** argv)
             neighbor_push(&graph[out_ids[k]], base_id);
             
             // Re-deriving candidate list and prune for nodes has more than R neighbors
-            if (graph[base_id].count > R) {
+            if (graph[out_ids[k]].count > R) {
                 candidates_from_neighbors(&vf, dist_fn, out_ids[k], &graph[out_ids[k]], scratch);
                 uint32_t new_count = 0;
                 uint32_t* new_ids = (uint32_t*) malloc(R * sizeof(uint32_t));
@@ -332,11 +327,14 @@ int main(int argc, char** argv)
         fwrite(neighbor_buf, sizeof(uint32_t), R, serialized_index_file);
     }
 
+    // Notify
+    printf("Finished indexing %s", vec_path);
+
     /* Cleanups */
     free(shuffle_order);
     free(out_ids);
     free(scratch);
-    for (uint32_t k = 0; k < vf.num_vectors; k++) free(graph[k].ids);
+    for (uint32_t k = 0; k < vf.num_vectors; k++) {free(graph[k].ids);}
     free(graph);
     fclose(serialized_index_file);
     free(neighbor_buf);
