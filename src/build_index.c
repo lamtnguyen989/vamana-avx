@@ -5,11 +5,15 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/stat.h>
 
 #include "distance.h"
 #include "index_format.h"
+#include "option.h"
 #include "vecfile.h"
+
+DEFINE_OPTION(uint32_t);
 
 /* Neighbors graph (represented as adjacency list) */
 typedef struct {
@@ -69,44 +73,99 @@ static uint32_t find_medoid(VecFile* file, dist_fn_t dist_fn) {
     return best_index;
 }
 
-static void greedy_beam_search(VecFile* vf, Neighbors* graph, dist_fn_t dist_fn, 
-                        uint32_t start_id, uint32_t beam_width, 
-                        const float* query, CandidateList* candidates)
+static void greedy_search(VecFile* vf, Neighbors* graph, dist_fn_t dist_fn, 
+                        uint32_t start_id, const float* query, CandidateList* candidates)
 {
     /* Initialize the candidates list */
     insert_candidate(candidates, start_id, dist_fn(query, vecfile_data_at(vf, start_id), vf->dim));
 
-    /* Process upto `beam_width` unvisited candidates per steps */
-    uint32_t* batch_index = (uint32_t*) malloc(beam_width*sizeof(uint32_t));
-    uint32_t batch_count = 0;
+    /* Fills the candidate list up to list count */
+    int candidate_idx;
+    while ((candidate_idx = closest_unvisited_candidate(candidates)) != -1) {
+        // Mark the candidate as visited
+        uint32_t cur_idx = candidates->items[candidate_idx].id;
+        candidates->items[candidate_idx].visited = 1;
 
-    while ((batch_count = next_unvisted_candidates(candidates, batch_index, beam_width)) > 0) {
-        
-        for (uint32_t b = 0; b < batch_count; b++) {
-            // Mark candidates in current batch as visited
-            candidates->items[batch_index[b]].visited = 1;
+        // Try insert to the candidate list
+        Neighbors* nb = &graph[cur_idx];
+        for (uint32_t k = 0; k < nb->count; k++) {
+            uint32_t nb_id = nb->ids[k];
+            float d = dist_fn(vecfile_data_at(vf, nb_id), query, vf->dim);
+            insert_candidate(candidates, nb_id, d);
+        }
+    }
+}
+
+// Alpha-pruning
+static void robust_prune(VecFile* vf, dist_fn_t dist_fn, uint32_t base_id,
+                        Candidate* candidates, uint32_t n, uint32_t R, float alpha,
+                        uint32_t* out_ids, uint32_t* out_count)
+{
+    // Purely gredy when alpha==1.0
+    if (alpha == 1.0) {
+        return;
+    }
+
+    // Bookeeping for alive candidates
+    uint8_t* alive = (uint8_t*) malloc(n*sizeof(uint8_t));
+    memset(alive, 1, n);
+
+    // Make sure we are not considering the base id due it haveing distance zero
+    for (uint32_t k = 0; k < n; k++) {
+        if (candidates[k].id == base_id) {
+            alive[k] = 0;
+        }
+    }
+
+    // Pruning
+    uint32_t count = 0;
+    for (uint32_t k = 0; (k < n) && (count < R); k++) {
+        if (!alive[k])
+            continue;
+
+        out_ids[count++] = candidates[k].id;
+        const float* vec = vecfile_data_at(vf, candidates[k].id);
+        for (uint32_t j = 0; j < n; j++) {
+            if (!alive[j])
+                continue;
             
-            // Collect, evaluate and try insert all neighbors across the batch
-            uint32_t curr_id = candidates->items[batch_index[b]].id;
-            Neighbors* neighbors = &graph[curr_id];
-            for (uint32_t k = 0; k < neighbors->count; k++) {
-                uint32_t nb_id = neighbors->ids[k];
-                insert_candidate(candidates, nb_id, dist_fn(query, vecfile_data_at(vf, nb_id), vf->dim));
+            float dist = dist_fn(vecfile_data_at(vf, candidates[k].id), 
+                                vecfile_data_at(vf, candidates[j].id),
+                                vf->dim);
+
+            if (alpha*dist <= candidates[j].dist) {
+                alive[j] = 0;
             }
         }
     }
 
-    // Cleanups
-    free(batch_index);
-}
-
-static void robust_prune()
-{
-
+    *out_count = count;
+    free(alive);
 }
 
 
 int main(int argc, char** argv) 
 {
+    // CLI parsing
+    if (argc < 3) {
+        fprintf(stderr, "usage: %s <vectors.vecf> <index.vecfidx> [R=32] [L=64] [alpha=1.2] [seed]\n"
+                        "\n"
+                        "  vectors.vecf:        Indexing data (shard)\n"
+                        "  index.vecfidx:       Output index file\n"
+                        "  R:                   Max out degree\n"
+                        "  L:                   Search list length\n"
+                        "  alpha:               Pruning distance scailing parameter\n"
+                        "  seed:                Optional seed\n"
+                        , argv[0]);
+        return 1;
+    }
+    const char* vec_path = argv[1];
+    const char* index_path = argv[2];
+    uint32_t R = argc > 3 ? (uint32_t) atoi(argv[3]) : 32;
+    uint32_t L = argc > 4 ? (uint32_t) atoi(argv[4]) : 64;
+    OPTION(uint32_t) seed_opt = argc > 5
+        ? OPTION_SOME(uint32_t, (uint32_t)strtoul(argv[8], NULL, 10))
+        : OPTION_NONE(uint32_t);
+
     return 0;
 }

@@ -3,6 +3,7 @@
 #ifndef INDEX_FORMAT_H
 #define INDEX_FORMAT_H
 
+#include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -102,7 +103,7 @@ static inline int insert_candidate(CandidateList* list, uint32_t id, float dista
     return 1;
 }
 
-static inline uint32_t next_unvisted_candidates(CandidateList* list, uint32_t* candidate_indices, uint32_t max_count) {
+static inline uint32_t next_unvisted_candidates_batch(CandidateList* list, uint32_t* candidate_indices, uint32_t max_count) {
     uint32_t count = 0;
     for (uint32_t i = 0; i < list->size && count < max_count; i++) {
         if (!list->items[i].visited) {
@@ -110,6 +111,16 @@ static inline uint32_t next_unvisted_candidates(CandidateList* list, uint32_t* c
         }
     }
     return count;
+}
+
+// To be used when building index since the insert sort candidates by closest
+static inline int closest_unvisited_candidate(CandidateList* list) {
+    for (uint32_t k = 0; k < list->size; k++) {
+        if (!list->items[k].visited) {
+            return (int)k;
+        }
+    }
+    return -1;
 }
 
 
