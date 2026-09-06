@@ -65,7 +65,7 @@ static inline void pq_build_distance_table(const PQCodebook* pq, dist_fn_t dista
 }
 
 // ADC distances
-static inline float pq_adc_distances(const PQCodebook* pq, float* adc_table, uint8_t* codes) 
+static inline float pq_adc_distance(const PQCodebook* pq, float* adc_table, uint8_t* codes) 
 {
     float result = 0.0f;
     for (size_t m = 0; m < pq->M; m++) {
@@ -249,7 +249,7 @@ static inline void pq_codes_free(PQCodes* pq_codes)
 }
 
 // PQ encoding data indexing
-static inline uint8_t* pq_codes_at(PQCodes* pq_codes, uint32_t point_id) 
+static inline uint8_t* pq_codes_at(const PQCodes* pq_codes, uint32_t point_id) 
 {
     return &pq_codes->data[(size_t)point_id*pq_codes->M];
 }

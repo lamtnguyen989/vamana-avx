@@ -32,6 +32,14 @@ static inline void index_record_decode(IndexHeader* header, const uint8_t* buffe
     out_record->neighbors = tail + 1;
 }
 
+// Determine the size of the record through the header
+static inline size_t index_record_size_from_header(const IndexHeader* header)
+{
+    return  header->dim * sizeof(float)     // `vector` size
+            + sizeof(uint32_t)              // `degree` size
+            + header->R * sizeof(uint32_t); // `neighbors` size
+}
+
 
 /* List (essentially a vec or array) of searching candidates */
 // Searching candidates (with respect to a vector)

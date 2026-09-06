@@ -101,10 +101,37 @@ static void free_vamana_list(VamanaList* vl)
     vl->count = 0;
 }
 
-// Query beam search
-static void beam_search_pq()
+// Query beam search to be run for each thread
+static void beam_search_pq(int vamana_fd, 
+                        const IndexHeader* hdr, 
+                        const PQCodebook* codebook,
+                        const PQCodes* encodings,
+                        dist_fn_t dist_fn,
+                        const float* query,
+                        uint32_t L, 
+                        uint32_t K, 
+                        uint32_t beam_width,
+                        uint32_t* out_ids,
+                        float* out_dists)
 {
+    // Grad the thread-local io_uring
+    struct io_uring* uring = get_thread_uring();
 
+    // ADC table (1 instance per query)
+    float* table = (float*) malloc(codebook->M * codebook->K * sizeof(float));
+    pq_build_distance_table(codebook, dist_fn, query, table);
+
+    // Initialize candidates
+    CandidateList cand_list;
+    candidate_list_init(&cand_list, L);
+
+    // Initialize base distance (to medoid)
+    float d0 = pq_adc_distance(codebook, table, pq_codes_at(encodings, hdr->medoid_id));
+    insert_candidate(&cand_list, hdr->medoid_id, d0);
+
+    // Batch scratch space initialization
+    uint32_t record_size = index_record_size_from_header(hdr);
+    uint8_t* batch_buffer = (uint8_t*) malloc(beam_width * record_size * sizeof(uint8_t));
 }
 
 
@@ -277,7 +304,8 @@ int main(int argc, char** argv)
         if (encodings.n_points != hdr.n_points) {
             fprintf(stderr, "Rank %d: PQ encoding point count %u does not match Vamana graph point count %u! "
                             "Base file name of %s"
-                        ,rank, encodings.n_points, hdr.n_points, base_filename);
+                            ,rank, encodings.n_points, hdr.n_points, base_filename);
+            MPI_Abort(MPI_COMM_WORLD, 9);
         }
 
         // Shard cleanups
