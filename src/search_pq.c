@@ -113,12 +113,11 @@ int main(int argc, char** argv)
     /* Start MPI multi-threaded environment */
     int provided;
     MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &provided);
-    if (provided < MPI_THREAD_FUNNELED) {
+    if (provided != MPI_THREAD_FUNNELED) {
         fprintf(stderr, "MPI implementation doesn't support MPI_THREAD_FUNNELED (got %d)\n", provided);
         MPI_Abort(MPI_COMM_WORLD, 1);
     }
 
-    /* Usual MPI setup */
     int rank, world_size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
@@ -188,6 +187,8 @@ int main(int argc, char** argv)
     // Probe the index directory to figure out how many shards to process
     // Note that this still meant to be run on a single node.
     // Multiple nodes adjustments probably needs some broadcasting scheme outside my paygrade at the moment
+    // Also, as for duplicated work, it is really not since every rank needs the full file list to know which one to grab and process
+    // MPI_Bcast(), again above my paygrade atm :)
     VamanaList vamana_shards = discover_shards_indexes(index_dir, ".vamindx");
     if (vamana_shards.count == 0) {
         if (rank == 0) {
@@ -195,17 +196,49 @@ int main(int argc, char** argv)
             MPI_Abort(MPI_COMM_WORLD, 3);
         }
     }
-    // Partition the shards
+    // Checking (at rank 0) that all index files have corresponding pq encodings and they can be accessed
     uint32_t n_shards = vamana_shards.count;
+    if (rank == 0) {
+        for (uint32_t k = 0; k < n_shards; k++) {
+            char check_path[1024];
+            snprintf(check_path, sizeof(check_path), "%s/%s.pqbin");
+            if (access(check_path, F_OK) != 0) {
+                fprintf(stderr, "Shard `%s.vamindx` does not have accessible corresponding encoding of `%s.pqbin` in %s\n",
+                                vamana_shards.file_base[k], index_dir, vamana_shards.file_base[k], pq_dir);
+            }
+            MPI_Abort(MPI_COMM_WORLD, 4);
+        }
+    }
 
+    // Finding work boundary for the ranks
+    uint32_t base = n_shards / (uint32_t)world_size;
+    uint32_t remainder = n_shards % (uint32_t)world_size;
+    uint32_t rank_count = base + (((uint32_t)rank < remainder) ? 1 : 0);
+    uint32_t rank_start = (uint32_t)rank * base + (((uint32_t)rank < remainder) ? (uint32_t)rank : remainder);
+    printf("Rank %d: Processing %d shards", rank, rank_count);
+    if (rank_count == 0) {fprintf(stderr, "Rank %d is idle!", rank);}
+    
     /* Search */
+    // Select metric
     dist_fn_t dist_fn = metric();
 
+    // Set-up rank-level scratch spaces
+    uint32_t* local_ids = (uint32_t*)malloc(n_queries * K * sizeof(uint32_t));
+    uint32_t* local_shard = (uint32_t*)malloc(n_queries * K * sizeof(uint32_t));
+    float* local_dists = (float*) (uint32_t*) malloc(n_queries * K * sizeof(float));
+    for (size_t k = 0; k < (size_t)K*n_queries; k++) {
+        local_ids[k] = UINT32_MAX;
+        local_shard[k] = UINT32_MAX;
+        local_dists[k] = FLT_MAX;
+    }
 
     /* Cleanups */
     free(queries); // Techically a potential memory hazard for rank 0 queries but all vecfile except for data is stack-allocated.
     pq_codebook_free(&codebook);
     free_vamana_list(&vamana_shards);
+    free(local_ids);
+    free(local_shard);
+    free(local_dists);
 
     MPI_Finalize();
 

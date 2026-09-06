@@ -179,7 +179,7 @@ int main(int argc, char** argv)
     /* Initalize MPI */
     int provided;
     MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &provided);
-    if (provided < MPI_THREAD_FUNNELED) {
+    if (provided != MPI_THREAD_FUNNELED) {
         fprintf(stderr, "MPI implementation doesn't support MPI_THREAD_FUNNELED (got %d)\n", provided);
         MPI_Abort(MPI_COMM_WORLD, 1);
     }
