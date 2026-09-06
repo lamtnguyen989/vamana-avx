@@ -17,7 +17,7 @@ mkdir -p $INDEX_DIR
 pids=()
 for f in "$SHARD_DIR"/shard_*.vecf; do
     n=$(basename "$f" .vecf | sed 's/shard_//')
-    out="$INDEX_DIR/index_${n}.vamindx"
+    out="$INDEX_DIR/shard_${n}.vamindx"
     echo "building shard index $n -> $out"
     "$BUILD_BIN" "$f" "$out" "$R" "$L" "$ALPHA" "$THREADS" "$SEED" &
     pids+=($!)

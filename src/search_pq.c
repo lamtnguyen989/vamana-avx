@@ -33,6 +33,13 @@ static struct io_uring* get_thread_uring()
     return &thread_uring_context.ring;
 }
 
+// Essentially probe the index directory to discover `.vamnidx` extension files
+static uint32_t discover_shards_indexes(cont char* index_path)
+{
+    uint32_t n = 0;
+    return n;   // TODO
+}
+
 // Doing 1 query beam search
 static void beam_search()
 {
@@ -64,7 +71,7 @@ int main(int argc, char** argv)
                 "\n"
                 "  queries.vecf         Queries for search in the dataset.\n"
                 "  K                    Number of top ranked choices.\n"
-                "  index_dir/           Directory of Vamana graph index.\n"
+                "  index_dir/           Directory of Vamana graph index (will only currently process `index_<n>.vamindx` files in the directory).\n"
                 "  codebook.pqbook      Product quantization codebook file.\n"
                 "  pq_encoding_dir/     Product quantization encodings directory (of data shards).\n"
                 "  L                    Search candidate list size (default: 64)\n"
@@ -117,7 +124,8 @@ int main(int argc, char** argv)
     }
 
     /* Partition the shard indexing work */
-    
+    // Probe the index directory to figure out how many shards to process
+
 
     /* Cleanups */
     free(queries); // Techically a potential memory hazard for rank 0 queries but all vecfile except for data is stack-allocated.

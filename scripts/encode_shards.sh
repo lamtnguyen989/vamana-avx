@@ -25,7 +25,7 @@ fi
 pids=()
 for f in "$SHARD_DIR"/shard_*.vecf; do
     n=$(basename "$f" .vecf | sed 's/shard_//')
-    out="$ENCODING_DIR/pq_codes_${n}.pqbin"
+    out="$ENCODING_DIR/shard_${n}.pqbin"
     echo "Encoding shard $n -> $out"
     "$ENCODER" "$f" "$CODEBOOK" "$out" "$THREADS" &
     pids+=($!)
