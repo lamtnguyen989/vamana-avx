@@ -7,6 +7,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "distance.h"
 #include "index_format.h"
 #include "vecfile.h"
 #include "pq.h"
@@ -131,7 +132,7 @@ int main(int argc, char** argv)
                 "\n"
                 "  queries.vecf         Queries for search in the dataset.\n"
                 "  K                    Number of top ranked choices.\n"
-                "  index_dir/           Directory of Vamana graph index (will only currently process `index_<n>.vamindx` files in the directory).\n"
+                "  index_dir/           Directory of Vamana graph index (will only currently process `.vamindx` files in the directory).\n"
                 "  codebook.pqbook      Product quantization codebook file.\n"
                 "  pq_encoding_dir/     Product quantization encodings directory (of data shards).\n"
                 "  L                    Search candidate list size (default: 64)\n"
@@ -185,19 +186,26 @@ int main(int argc, char** argv)
 
     /* Partition the shard indexing work */
     // Probe the index directory to figure out how many shards to process
-    VamanaList index_shards = discover_shards_indexes(index_dir, ".vamindx");
-    if (index_shards.count == 0) {
+    // Note that this still meant to be run on a single node.
+    // Multiple nodes adjustments probably needs some broadcasting scheme outside my paygrade at the moment
+    VamanaList vamana_shards = discover_shards_indexes(index_dir, ".vamindx");
+    if (vamana_shards.count == 0) {
         if (rank == 0) {
             fprintf(stderr, "No `.vamindx` files to read graph index from.");
             MPI_Abort(MPI_COMM_WORLD, 3);
         }
     }
-    uint32_t n_shards = index_shards.count;
+    // Partition the shards
+    uint32_t n_shards = vamana_shards.count;
+
+    /* Search */
+    dist_fn_t dist_fn = metric();
 
 
     /* Cleanups */
     free(queries); // Techically a potential memory hazard for rank 0 queries but all vecfile except for data is stack-allocated.
-    free_vamana_list(&index_shards);
+    pq_codebook_free(&codebook);
+    free_vamana_list(&vamana_shards);
 
     MPI_Finalize();
 
