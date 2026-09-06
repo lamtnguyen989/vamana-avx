@@ -43,7 +43,7 @@ static struct io_uring* get_thread_uring()
 typedef struct {
     char** file_base;
     uint32_t count;
-} ShardList;
+} VamanaList;
 
 // Sorting file (base) names alphabetically
 static int _compar_name(const void* a, const void* b) {
@@ -51,10 +51,10 @@ static int _compar_name(const void* a, const void* b) {
 }
 
 // Essentially probe the index directory to discover `.vamnidx` extension files
-static ShardList discover_shards_indexes(const char* index_dir_path, const char* ext)
+static VamanaList discover_shards_indexes(const char* index_dir_path, const char* ext)
 {
     // Probing the index directory
-    ShardList result = {NULL, 0};
+    VamanaList result = {NULL, 0};
     DIR* index_directory = opendir(index_dir_path);
     if (index_directory == NULL) {return result;}
 
@@ -90,6 +90,14 @@ static ShardList discover_shards_indexes(const char* index_dir_path, const char*
     // Return an alphabetically sorted result
     qsort(result.file_base, result.count, sizeof(char*), _compar_name);
     return result;
+}
+
+static void free_vamana_list(VamanaList* vl) 
+{
+    for (uint32_t k = 0; k < vl->count; k++) {free(vl->file_base[k]);}
+    free(vl->file_base);
+    vl->file_base = NULL;
+    vl->count = 0;
 }
 
 // Doing 1 query beam search
@@ -177,10 +185,10 @@ int main(int argc, char** argv)
 
     /* Partition the shard indexing work */
     // Probe the index directory to figure out how many shards to process
-    ShardList index_shards = discover_shards_indexes(index_dir, ".vamindx");
+    VamanaList index_shards = discover_shards_indexes(index_dir, ".vamindx");
     if (index_shards.count == 0) {
         if (rank == 0) {
-            fprintf(stderr, "No `.vamindx files to read graph index from.");
+            fprintf(stderr, "No `.vamindx` files to read graph index from.");
             MPI_Abort(MPI_COMM_WORLD, 3);
         }
     }
@@ -189,6 +197,7 @@ int main(int argc, char** argv)
 
     /* Cleanups */
     free(queries); // Techically a potential memory hazard for rank 0 queries but all vecfile except for data is stack-allocated.
+    free_vamana_list(&index_shards);
 
     MPI_Finalize();
 
