@@ -101,8 +101,8 @@ static void free_vamana_list(VamanaList* vl)
     vl->count = 0;
 }
 
-// Doing 1 query beam search
-static void beam_search()
+// Query beam search
+static void beam_search_pq()
 {
 
 }
@@ -188,7 +188,7 @@ int main(int argc, char** argv)
     // Note that this still meant to be run on a single node.
     // Multiple nodes adjustments probably needs some broadcasting scheme outside my paygrade at the moment
     // Also, as for duplicated work, it is really not since every rank needs the full file list to know which one to grab and process
-    // MPI_Bcast(), again above my paygrade atm :)
+    // MPI_Alltoall(), again above my paygrade atm :)
     VamanaList vamana_shards = discover_shards_indexes(index_dir, ".vamindx");
     if (vamana_shards.count == 0) {
         if (rank == 0) {
@@ -230,6 +230,59 @@ int main(int argc, char** argv)
         local_ids[k] = UINT32_MAX;
         local_shard[k] = UINT32_MAX;
         local_dists[k] = FLT_MAX;
+    }
+    char vamana_path[1024]; memset(vamana_path, 0, sizeof(vamana_path));
+    char pq_codes_path[1024]; memset(pq_codes_path, 0, sizeof(pq_codes_path));
+    
+    MPI_Barrier(MPI_COMM_WORLD); // Mainly to start the timings
+    double t0 = MPI_Wtime();
+
+    // Start processing (shard-by-shard)
+    for (uint32_t s = 0; s < rank_count; s++) {
+        uint32_t shard_idx = rank_start + s;
+        char* base_filename = vamana_shards.file_base[shard_idx];
+        snprintf(vamana_path, sizeof(vamana_path), "%s/%s.vamindx", index_dir, base_filename);
+        snprintf(pq_codes_path, sizeof(pq_codes_path), "%s/%s.pqbin", index_dir, vamana_shards.file_base[shard_idx]);
+
+        // Not using fopen here for io_uring
+        int vamana_fd = open(vamana_path, O_RDONLY);
+        if (vamana_fd < 0) {
+            fprintf(stderr, "Rank %d: Can not open %s", rank, vamana_path);
+            MPI_Abort(MPI_COMM_WORLD, 5);
+        }
+
+        // Read the IndexHeader
+        IndexHeader hdr;
+        if (pread(vamana_fd, &hdr, sizeof(IndexHeader), 0) != sizeof(IndexHeader)) {
+            fprintf(stderr, "Rank %d: Failed to read Vamana Index header from %s", rank, vamana_path);
+            MPI_Abort(MPI_COMM_WORLD, 6);
+        }
+
+        // Read in the PQ encodings
+        PQCodes encodings;
+        if (pq_codes_load(pq_codes_path, &encodings) != 0) {
+            fprintf(stderr, "Rank %d: Failed to read the encodings at %s", rank, pq_codes_path);
+            MPI_Abort(MPI_COMM_WORLD, 7);
+        }
+
+        // Checking hashes
+        if (pq_codes_matches_codebook(&encodings, &codebook) != 0) {
+            fprintf(stderr, "Rank %d: Encodings at %s was not encoded with the provide codebook at %s!\n"
+                            "Encoding hash: %016llx which not matches codebook hash %016llx.\n",
+                            rank, pq_codes_path, codebook_path, encodings.codebook_hash, codebook.hash);
+            MPI_Abort(MPI_COMM_WORLD, 8);
+        }
+
+        // Check points metadata against the header
+        if (encodings.n_points != hdr.n_points) {
+            fprintf(stderr, "Rank %d: PQ encoding point count %u does not match Vamana graph point count %u! "
+                            "Base file name of %s"
+                        ,rank, encodings.n_points, hdr.n_points, base_filename);
+        }
+
+        // Shard cleanups
+        close(vamana_fd);
+        pq_codes_free(&encodings);
     }
 
     /* Cleanups */
