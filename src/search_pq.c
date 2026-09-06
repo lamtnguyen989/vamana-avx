@@ -1,12 +1,18 @@
+#include <dirent.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <liburing.h>
 #include <mpi.h>
 #include <omp.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "index_format.h"
 #include "vecfile.h"
 #include "pq.h"
+
+#define FILENAME_LENGTH_CAP 256
+#define EXTENSION_LENGTH_CAP 16 
 
 #define URING_QUEUE_DEPTH 128
 #define RERANK_POOL 128
@@ -33,11 +39,57 @@ static struct io_uring* get_thread_uring()
     return &thread_uring_context.ring;
 }
 
+/* Shard Vamana index discovery (based on a given path, non-recursive) */
+typedef struct {
+    char** file_base;
+    uint32_t count;
+} ShardList;
+
+// Sorting file (base) names alphabetically
+static int _compar_name(const void* a, const void* b) {
+    return strncmp(*(const char *const *)a, *(const char *const *)b, FILENAME_LENGTH_CAP);
+}
+
 // Essentially probe the index directory to discover `.vamnidx` extension files
-static uint32_t discover_shards_indexes(cont char* index_path)
+static ShardList discover_shards_indexes(const char* index_dir_path, const char* ext)
 {
-    uint32_t n = 0;
-    return n;   // TODO
+    // Probing the index directory
+    ShardList result = {NULL, 0};
+    DIR* index_directory = opendir(index_dir_path);
+    if (index_directory == NULL) {return result;}
+
+    // Setting up result container
+    size_t cap = 16;
+    result.file_base = (char**) (cap*sizeof(char*));
+
+    size_t ext_len = strnlen(ext, EXTENSION_LENGTH_CAP);
+    
+    // Record all files matching the specified extension
+    struct dirent* entry;
+    while((entry = readdir(index_directory)) != NULL) {
+        size_t name_len = strnlen(entry->d_name, FILENAME_LENGTH_CAP);
+        if ((name_len <= ext_len) || strncmp(entry->d_name + (name_len - ext_len), ext, EXTENSION_LENGTH_CAP) != 0) {
+            continue;
+        }
+
+        // Growing the list if we hit cap
+        if (result.count == cap) {
+            cap *= 2;
+            result.file_base = (char**) realloc(result.file_base, cap*sizeof(char*));
+        }
+
+        // Append the valid file names
+        size_t file_base_len = name_len - ext_len;
+        char* file_base = (char*) malloc(file_base_len + 1);
+        memcpy(file_base, entry->d_name, file_base_len);
+        file_base[file_base_len] = '\0'; // Make sure to NULL-terminate
+        result.file_base[result.count++] - file_base;
+    }
+    closedir(index_directory);
+
+    // Return an alphabetically sorted result
+    qsort(result.file_base, result.count, sizeof(char*), _compar_name);
+    return result;
 }
 
 // Doing 1 query beam search
@@ -125,6 +177,14 @@ int main(int argc, char** argv)
 
     /* Partition the shard indexing work */
     // Probe the index directory to figure out how many shards to process
+    ShardList index_shards = discover_shards_indexes(index_dir, ".vamindx");
+    if (index_shards.count == 0) {
+        if (rank == 0) {
+            fprintf(stderr, "No `.vamindx files to read graph index from.");
+            MPI_Abort(MPI_COMM_WORLD, 3);
+        }
+    }
+    uint32_t n_shards = index_shards.count;
 
 
     /* Cleanups */
