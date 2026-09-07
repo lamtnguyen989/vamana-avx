@@ -15,23 +15,23 @@ struct Args
     output_file: PathBuf, 
 
     /// Total number of vectors to be generated
-    #[arg(long = "n-vectors", default_value_t = 50_000)]
+    #[arg(short = 'n', long = "n-vectors", default_value_t = 50_000)]
     num_vectors: usize, 
     
     /// Dimension of the vector space
-    #[arg(long, default_value_t = 128)] 
+    #[arg(short = 'd', long, default_value_t = 128)] 
     dim: usize,
 
     /// Number of vector clusters
-    #[arg(long = "n-clusters", default_value_t = 200)]
+    #[arg(short = 'c', long = "clusters", default_value_t = 200)]
     num_clusters: usize,
 
     /// Standard deviations for each vector blobs
-    #[arg(long = "cluster-std-dev", default_value_t = 1.5)] 
+    #[arg(short = 's', long = "std-dev", default_value_t = 1.5)] 
     cluster_std_dev: f64, 
 
     /// Number of threads to be used in generation concurrently
-    #[arg(long = "threads", default_value_t = 4)] 
+    #[arg(short, long = "threads", default_value_t = 4)] 
     threads: usize, 
     
     /// RNG seed
@@ -153,14 +153,12 @@ fn main() -> std::io::Result<()> {
                         .build_global();
     match rayon_setup {
         Ok(_) => println!("Global threadpool initialized successfully."),
-        Err(e) => panic!("Failed to Initialize global threadpool. Error: {}", e)
+        Err(e) => panic!("Failed to initialize global threadpool. Error: {}", e)
     }
 
     // Generate data and serialize to file
     generate_vecfile(&args)?;
 
-
     println!("Wrote data to {:?}", args.output_file);
-
     Ok(())
 }

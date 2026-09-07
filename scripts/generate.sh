@@ -4,11 +4,7 @@ mkdir -p data/
 mkdir -p data/shards/
 
 # Generate and sample training data
-cargo run -r -p generate_data   -- data/vectors.vecf \
-                                --n-vectors 2000000 \
-                                --dim 512 \
-                                --n-clusters 200 \
-                                --cluster-std-dev 10.5 \
+cargo run -r -p generate_data -- data/vectors.vecf -n 2000000 -d 512 -c 200 -s 10.5 \
                                 --threads 4 \
                                 --seed 69
                                 
