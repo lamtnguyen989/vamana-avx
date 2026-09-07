@@ -7,6 +7,7 @@ use rand_xoshiro::Xoshiro256PlusPlus;
 use rayon::prelude::*;
 
 const WRITE_BUFFER_SIZE: usize = 16 * 1024 * 1024;
+
 #[derive(Parser, Debug)]
 struct Args 
 {
@@ -65,7 +66,8 @@ fn resolve_output_path(user_path: &Path) -> std::io::Result<PathBuf> {
     Ok(full_path)
 }
 
-/// Generating clusters centers (deliberately double precision and shouldn't matter due to truncation when writing)
+/// Generating clusters centers 
+//  Deliberately double precision and shouldn't matter due to we only use this as reference for blobs locations
 /// Furthermore, the generations is purely sequential and independent from blob vectors generations that follows
 fn generate_centers(seed: u64, n_clusters: usize, dim: usize) -> Vec<Vec<f64>>
 {
