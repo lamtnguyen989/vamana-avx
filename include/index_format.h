@@ -24,10 +24,10 @@ typedef struct {
 } IndexRecord;
 
 // Transforming byte buffer into an index record
-static inline void index_record_decode(IndexHeader* header, const uint8_t* buffer, IndexRecord* out_record)
+static inline void index_record_decode(const IndexHeader* header, const uint8_t* buffer, IndexRecord* out_record)
 {
     out_record->vector = (const float*) buffer;
-    const uint32_t *tail = (const uint32_t*) (buffer + (size_t)header->dim * sizeof(float));
+    const uint32_t *tail = (const uint32_t*) (buffer + header->dim*sizeof(float));
     out_record->degree = tail[0];
     out_record->neighbors = tail + 1;
 }
@@ -38,6 +38,12 @@ static inline size_t index_record_size_from_header(const IndexHeader* header)
     return  header->dim * sizeof(float)     // `vector` size
             + sizeof(uint32_t)              // `degree` size
             + header->R * sizeof(uint32_t); // `neighbors` size
+}
+
+// Finding index offset in disk given a point index
+static inline size_t index_offset_of(uint32_t point_idx, const IndexHeader* hdr)
+{
+    return sizeof(*hdr) + point_idx*index_record_size_from_header(hdr);
 }
 
 
@@ -58,9 +64,16 @@ typedef struct {
 
 static inline void candidate_list_init(CandidateList* list, uint32_t capacity)
 {
+    uint32_t cap = 0;
+    if (capacity <= 0) {
+        #if defined(DEBUG)
+            fprintf(stderr, "Size can not be zero, default to 8");
+        #endif
+        cap = 8;
+    }
     list->items = (Candidate*) malloc(capacity*sizeof(Candidate));
     list->size = 0;
-    list->capacity = capacity;
+    list->capacity = cap;
 }
 
 static inline void candidate_list_free(CandidateList *list)

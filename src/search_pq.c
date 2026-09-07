@@ -40,6 +40,105 @@ static struct io_uring* get_thread_uring()
     return &thread_uring_context.ring;
 }
 
+static void uring_read_vamana_index(struct io_uring* uring,
+                                    int vamana_fd,
+                                    const IndexHeader* hdr,
+                                    uint32_t* vamana_ids,
+                                    uint32_t count,
+                                    size_t read_len,
+                                    void* buffer,
+                                    uint64_t stride)
+{
+    // Prep the submission queue
+    for (uint64_t k = 0; k < count; k++) {
+        // Get the submission queue
+        struct io_uring_sqe* submission_queue = io_uring_get_sqe(uring);
+        
+        // Offset off the header and stride through flat index
+        uint64_t offset = (uint64_t)index_offset_of(vamana_ids[k], hdr);
+        
+        // Prep read and tag with the index
+        io_uring_prep_read(submission_queue, vamana_fd, buffer + k*stride, read_len, offset);
+        io_uring_sqe_set_data64(submission_queue, k);
+    }
+
+    // Submit request
+    io_uring_submit(uring);
+
+    // Completion queue processing
+    for (uint32_t k = 0; k < count; k++) {
+        // Wait for the completion queue
+        struct io_uring_cqe* completion_queue;
+        io_uring_wait_cqe(uring, &completion_queue);
+        
+        // Check result code
+        if (completion_queue->res < 0) {
+            fprintf(stderr, "io_uring read failed. Error: ", strerror(completion_queue->res));
+        }
+
+        // Marking completion
+        io_uring_cqe_seen(uring, completion_queue);
+    }
+
+}
+
+// Query beam search to be run for each thread
+static void beam_search_pq(int vamana_fd, 
+                        const IndexHeader* hdr, 
+                        const PQCodebook* codebook,
+                        const PQCodes* encodings,
+                        dist_fn_t dist_fn,
+                        const float* query,
+                        uint32_t L, 
+                        uint32_t K, 
+                        uint32_t beam_width,
+                        uint32_t* out_ids,
+                        float* out_dists)
+{
+    // Grab the thread-local io_uring
+    struct io_uring* uring = get_thread_uring();
+
+    // ADC table (1 instance per query)
+    float* table = (float*) malloc(codebook->M * codebook->K * sizeof(float));
+    pq_build_distance_table(codebook, dist_fn, query, table);
+
+    // Initialize candidates
+    CandidateList cand_list;
+    candidate_list_init(&cand_list, L);
+
+    // Initialize base distance (to medoid)
+    float d0 = pq_adc_distance(codebook, table, pq_codes_at(encodings, hdr->medoid_id));
+    insert_candidate(&cand_list, hdr->medoid_id, d0);
+
+    // Batch scratch space initialization
+    uint32_t record_size = index_record_size_from_header(hdr);
+    uint8_t* batch_buffer = (uint8_t*) malloc(beam_width * record_size * sizeof(uint8_t));
+    uint32_t* batch_vamana_ids = (uint32_t*) malloc(beam_width*sizeof(uint32_t));
+    uint32_t* unvisited_ids = (uint32_t*) malloc(beam_width*sizeof(uint32_t));
+
+    // Preparing reading from Vamana index in batch of `beam_width` (maximum)
+    uint32_t batch_count = 0;
+    while((batch_count = next_unvisted_candidates_batch(&cand_list, unvisited_ids, beam_width)) > 0) {
+        for (uint32_t k = 0; k < batch_count; k++) {
+            cand_list.items[unvisited_ids[k]].visited = 1;
+            batch_vamana_ids[k] = cand_list.items[unvisited_ids[k]].id;
+        }
+    }
+
+    // Read from Vamana index in batch of `batch_count` <= `beam_width`
+    uring_read_vamana_index(uring, vamana_fd, hdr, batch_vamana_ids, batch_count, record_size, batch_buffer, record_size);
+
+    // Decode all buffer to retrieve records and insert to the list
+    IndexRecord record;
+    for (uint32_t k = 0; k < batch_count; k++) {
+        index_record_decode(hdr, batch_buffer + k*record_size, &record);
+        uint32_t nb = record.neighbors[k];
+        float d = pq_adc_distance(codebook, table, pq_codes_at(encodings, nb));
+        insert_candidate(&cand_list, nb, d);
+    }
+}
+
+
 /* Shard Vamana index discovery (based on a given path, non-recursive) */
 typedef struct {
     char** file_base;
@@ -100,40 +199,6 @@ static void free_vamana_list(VamanaList* vl)
     vl->file_base = NULL;
     vl->count = 0;
 }
-
-// Query beam search to be run for each thread
-static void beam_search_pq(int vamana_fd, 
-                        const IndexHeader* hdr, 
-                        const PQCodebook* codebook,
-                        const PQCodes* encodings,
-                        dist_fn_t dist_fn,
-                        const float* query,
-                        uint32_t L, 
-                        uint32_t K, 
-                        uint32_t beam_width,
-                        uint32_t* out_ids,
-                        float* out_dists)
-{
-    // Grad the thread-local io_uring
-    struct io_uring* uring = get_thread_uring();
-
-    // ADC table (1 instance per query)
-    float* table = (float*) malloc(codebook->M * codebook->K * sizeof(float));
-    pq_build_distance_table(codebook, dist_fn, query, table);
-
-    // Initialize candidates
-    CandidateList cand_list;
-    candidate_list_init(&cand_list, L);
-
-    // Initialize base distance (to medoid)
-    float d0 = pq_adc_distance(codebook, table, pq_codes_at(encodings, hdr->medoid_id));
-    insert_candidate(&cand_list, hdr->medoid_id, d0);
-
-    // Batch scratch space initialization
-    uint32_t record_size = index_record_size_from_header(hdr);
-    uint8_t* batch_buffer = (uint8_t*) malloc(beam_width * record_size * sizeof(uint8_t));
-}
-
 
 int main(int argc, char** argv)
 {
@@ -260,6 +325,9 @@ int main(int argc, char** argv)
     }
     char vamana_path[1024]; memset(vamana_path, 0, sizeof(vamana_path));
     char pq_codes_path[1024]; memset(pq_codes_path, 0, sizeof(pq_codes_path));
+
+    uint32_t* shard_ids = (uint32_t*) malloc(n_queries*sizeof(uint32_t));
+    float* shard_dists = (float*) malloc(n_queries*sizeof(float));
     
     MPI_Barrier(MPI_COMM_WORLD); // Mainly to start the timings
     double t0 = MPI_Wtime();
@@ -308,12 +376,31 @@ int main(int argc, char** argv)
             MPI_Abort(MPI_COMM_WORLD, 9);
         }
 
+        // Clearing out previous shard's data
+        memset(shard_ids, 0, sizeof(shard_ids));
+        memset(shard_dists, 0, sizeof(shard_dists));
+
+        // Execute parallel search (across queries)
+        #pragma omp parallel for num_threads(n_threads)
+        for (uint32_t q = 0; q < n_queries; q++) {
+            beam_search_pq(vamana_fd, &hdr, &codebook, &encodings, dist_fn, 
+                            &queries[(size_t)q*dim], L, K, beam_width,
+                            &shard_ids[(size_t)q*K], &shard_dists[(size_t)q*K]);
+        }
+
+        // Reduce to a top K results
+        for (uint32_t q = 0; q < n_queries; q++) {
+
+        }
+
         // Shard cleanups
         close(vamana_fd);
         pq_codes_free(&encodings);
     }
 
     /* Cleanups */
+    free(shard_ids);
+    free(shard_dists);
     free(queries); // Techically a potential memory hazard for rank 0 queries but all vecfile except for data is stack-allocated.
     pq_codebook_free(&codebook);
     free_vamana_list(&vamana_shards);

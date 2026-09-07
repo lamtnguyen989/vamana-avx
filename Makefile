@@ -57,6 +57,9 @@ build_index: $(SRC_DIR)/build_index.c
 	mkdir -p $(BUILD_DIR)
 	$(CC) $(CFLAGS) -I$(INCLUDE_DIR) $< -o $(BUILD_DIR)/$@ $(LINK_FLAG) $(METRIC_IMPL)
 
+# Background verifications
+verif: ignore/verif.c
+	$(CC) $(CFLAGS) -I$(INCLUDE_DIR) $< -o $(BUILD_DIR)/$@ $(LINK_FLAG)
 
 clean:
 	rm -rf $(BUILD_DIR)
