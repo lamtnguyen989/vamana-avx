@@ -160,7 +160,7 @@ static VamanaList discover_shards_indexes(const char* index_dir_path, const char
 
     // Setting up result container
     size_t cap = 16;
-    result.file_base = (char**) (cap*sizeof(char*));
+    result.file_base = (char**) malloc(cap*sizeof(char*));
 
     size_t ext_len = strnlen(ext, EXTENSION_LENGTH_CAP);
     
