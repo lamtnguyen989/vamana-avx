@@ -7,9 +7,9 @@ set -euo pipefail
 
 
 # Setting up background stuff
-SHARD_DIR="${1:?usage: encode_shards.sh <shard_dir> <encoding_dir> <codebook> [threads_per_shard=4]}"
-CODEBOOK="${2:?usage: encode_shards.sh <shard_dir> <encoding_dir> <codebook> [threads_per_shard=4]}"
-ENCODING_DIR="${3:?usage: encode_shards.sh <shard_dir> <encoding_dir> <codebook> [threads_per_shard=4]}"
+SHARD_DIR="${1:?usage: encode_shards.sh <encoding_dir> <shard_dir> <codebook> [threads_per_shard=4]}"
+CODEBOOK="${2:?usage: encode_shards.sh <encoding_dir> <shard_dir> <codebook> [threads_per_shard=4]}"
+ENCODING_DIR="${3:?usage: encode_shards.sh <encoding_dir> <shard_dir> <codebook> [threads_per_shard=4]}"
 THREADS="${3:-4}"
 ENCODER="$(dirname "$0")/../build/encode"
 
