@@ -1,0 +1,3 @@
+[workspace]
+members = ["generate_data"]
+resolver = "3"
