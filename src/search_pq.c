@@ -200,6 +200,20 @@ static void free_vamana_list(VamanaList* vl)
     vl->count = 0;
 }
 
+typedef struct {
+    uint32_t id;        // Neighbor id 
+    float dist;         // Distance
+    uint32_t shard_id;  // Data shard that this neighbor came from
+} ShardCandidate;
+
+static void top_k_reduction(
+    uint32_t* accumulator_ids, float* accumulator_dists, uint32_t* accumulator_shard_id,
+    uint32_t* new_ids, float* new_dists, uint32_t* new_shard_id, 
+    uint32_t K, ShardCandidate* scratch_space)
+{
+
+}
+
 int main(int argc, char** argv)
 {
     /* Start MPI multi-threaded environment */
@@ -328,6 +342,8 @@ int main(int argc, char** argv)
 
     uint32_t* shard_ids = (uint32_t*) malloc(n_queries*sizeof(uint32_t));
     float* shard_dists = (float*) malloc(n_queries*sizeof(float));
+
+    ShardCandidate* reduction_scratch = (ShardCandidate*) malloc(2*sizeof(ShardCandidate));
     
     MPI_Barrier(MPI_COMM_WORLD); // Mainly to start the timings
     double t0 = MPI_Wtime();
@@ -397,6 +413,7 @@ int main(int argc, char** argv)
         close(vamana_fd);
         pq_codes_free(&encodings);
     }
+    free(reduction_scratch);
 
     /* Cleanups */
     free(shard_ids);
