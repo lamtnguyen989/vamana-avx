@@ -8,7 +8,6 @@ import struct
 if __name__ == "__main__":
     # Setup argument parser
     ap = argparse.ArgumentParser()
-    ap = argparse.ArgumentParser()
     ap.add_argument("in_path")
     ap.add_argument("out_path")
     ap.add_argument("--sample-size", type=int, default=20000)
