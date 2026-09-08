@@ -271,10 +271,10 @@ int main(int argc, char** argv)
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 
     /* CLI parsing */
-    if (argc < 4) {
+    if (argc < 6) {
         if (rank == 0) {
             fprintf(stderr,
-                "Usage: mpirun -n <ranks> %s <queries.vecf> <K> <index_dir/> <codebook.pqbook> <pq_encoding_dir/> "
+                "Usage: mpirun -n <ranks> %s <queries.vecf> <K> <index_dir/> <codebook.pqbook> <pq_encoding_dir/> <result_file>"
                 "[L=64] [beam_width=8] [threads_per_rank=4] \n"
                 "\n"
                 "  queries.vecf         Queries for search in the dataset.\n"
@@ -282,6 +282,7 @@ int main(int argc, char** argv)
                 "  index_dir/           Directory of Vamana graph index (will only currently process `.vamindx` files in the directory).\n"
                 "  codebook.pqbook      Product quantization codebook file.\n"
                 "  pq_encoding_dir/     Product quantization encodings directory (of data shards).\n"
+                "  result_file          CSV File holding the results\n"
                 "  L                    Search candidate list size (default: 64)\n"
                 "  beam_width           Batch-size for beam search (default: 8)\n"
                 "  threads_per_rank     CPU threads per MPI rank (default: 4)\n"
@@ -296,9 +297,10 @@ int main(int argc, char** argv)
     const char* index_dir = argv[3];
     const char* codebook_path = argv[4];
     const char* pq_dir = argv[5];
-    int n_threads = argc > 6 ? atoi(argv[6]) : 4;
+    const char* result_file = argv[6];
     uint32_t L = argc > 7 ? (uint32_t)atoi(argv[7]) : 64;
-    uint32_t beam_width = argc > 8 ? (uint32_t)atoi(argv[8]) : 8; 
+    uint32_t beam_width = argc > 8 ? (uint32_t)atoi(argv[8]) : 8;
+    int n_threads = argc > 9 ? atoi(argv[9]) : 4;
 
     /* Rank 0 load queries and broadcast to other ranks */
     uint32_t n_queries = 0;
@@ -486,7 +488,6 @@ int main(int argc, char** argv)
     
     /* Merge to a global top-K at rank 0 */
     if (rank == 0) {
-
 
         // Cleanups
         free(all_dists);
