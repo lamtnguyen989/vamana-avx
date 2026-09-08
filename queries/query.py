@@ -1,3 +1,5 @@
+# Bootstraping script for generating queries and generating ground truths
+
 import argparse
 import struct
 import numpy as np

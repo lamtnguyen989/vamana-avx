@@ -5,4 +5,6 @@ source .venv/bin/activate
 pip install -r environments/requirements.txt
 echo
 
-python3 scripts/query.py data/vectors.vecf
+
+# Current still bootstrapping logic with python
+python3 queries/query.py data/vectors.vecf
