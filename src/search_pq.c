@@ -460,6 +460,40 @@ int main(int argc, char** argv)
     }
     free(reduction_scratch);
 
+    /* Gather all local top K results and to reduce to a global top K results at rank 0 */
+    // Making space at rank 0 to store all results 
+    uint32_t* all_ids = NULL;
+    uint32_t* all_shards = NULL;
+    float* all_dists = NULL;
+    if (rank == 0) {
+        all_ids = (uint32_t*) malloc(n_queries * K * world_size * sizeof(uint32_t));
+        all_shards = (uint32_t*) malloc(n_queries * K * world_size * sizeof(uint32_t));
+        all_dists = (float*) malloc(n_queries * K * world_size * sizeof(float));
+    }
+
+    // Gather all ranks result to rank 0
+    MPI_Gather(local_shard, (int)(n_queries * K), MPI_UINT32_T,
+                all_shards, (int)(n_queries * K), MPI_UINT32_T,
+                0, MPI_COMM_WORLD);
+
+    MPI_Gather(local_ids, (int)(n_queries * K), MPI_UINT32_T,
+                all_ids, (int)(n_queries * K), MPI_UINT32_T,
+                0, MPI_COMM_WORLD);
+
+    MPI_Gather(local_dists, (int)(n_queries * K), MPI_FLOAT,
+                all_dists, (int)(n_queries * K), MPI_FLOAT,
+                0, MPI_COMM_WORLD);
+    
+    /* Merge to a global top-K at rank 0 */
+    if (rank == 0) {
+
+
+        // Cleanups
+        free(all_dists);
+        free(all_shards);
+        free(all_dists);
+    }
+
     /* Cleanups */
     free(shard_ids);
     free(shard_dists);
