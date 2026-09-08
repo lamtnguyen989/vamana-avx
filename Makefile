@@ -3,7 +3,6 @@ CFLAGS  ?= -O3 -flto -march=native -mtune=native
 LINK_FLAG = -lm -fopenmp
 SRC_DIR = src
 BUILD_DIR = build
-INCLUDE_DIR = include
 MPICC := mpicc
 
 METRIC_IMPL ?= -DL2_IMPLEMENTATION
@@ -38,28 +37,28 @@ endef
 train: $(SRC_DIR)/train_pq.c
 	$(SETUP_SPACK)
 	mkdir -p $(BUILD_DIR)
-	$(MPICC) $(CFLAGS) -I$(INCLUDE_DIR) $< -o $(BUILD_DIR)/$@ $(LINK_FLAG) $(METRIC_IMPL)
+	$(MPICC) $(CFLAGS)  $< -o $(BUILD_DIR)/$@ $(LINK_FLAG) $(METRIC_IMPL)
 
 # Encode PQ on data shard after training a codebook binary
 encode: $(SRC_DIR)/encode_pq.c
 	mkdir -p $(BUILD_DIR)
-	$(CC) $(CFLAGS) -I$(INCLUDE_DIR) $< -o $(BUILD_DIR)/$@ $(LINK_FLAG) $(METRIC_IMPL)
+	$(CC) $(CFLAGS)  $< -o $(BUILD_DIR)/$@ $(LINK_FLAG) $(METRIC_IMPL)
 
 
 # Searching binary
 search: $(SRC_DIR)/search_pq.c
 	$(SETUP_SPACK)
 	mkdir -p $(BUILD_DIR)
-	$(MPICC) $(CFLAGS) -I$(INCLUDE_DIR) $< -o $(BUILD_DIR)/$@ $(LINK_FLAG) -luring $(METRIC_IMPL)
+	$(MPICC) $(CFLAGS)  $< -o $(BUILD_DIR)/$@ $(LINK_FLAG) -luring $(METRIC_IMPL)
 
 # Building index
 build_index: $(SRC_DIR)/build_index.c
 	mkdir -p $(BUILD_DIR)
-	$(CC) $(CFLAGS) -I$(INCLUDE_DIR) $< -o $(BUILD_DIR)/$@ $(LINK_FLAG) $(METRIC_IMPL)
+	$(CC) $(CFLAGS)  $< -o $(BUILD_DIR)/$@ $(LINK_FLAG) $(METRIC_IMPL)
 
 # Background verifications
 verif: ignore/verif.c
-	$(CC) $(CFLAGS) -I$(INCLUDE_DIR) $< -o $(BUILD_DIR)/$@ $(LINK_FLAG)
+	$(CC) $(CFLAGS)  $< -o $(BUILD_DIR)/$@ $(LINK_FLAG)
 
 clean:
 	rm -rf $(BUILD_DIR)
