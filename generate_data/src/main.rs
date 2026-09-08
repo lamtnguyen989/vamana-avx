@@ -39,7 +39,7 @@ struct Args
     seed: u64, 
     
     /// Batch size for vector writes
-    #[arg(long, default_value_t = 2000)] 
+    #[arg(short, long, default_value_t = 2000)] 
     batch_size: usize, 
 }
 

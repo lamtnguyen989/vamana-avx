@@ -232,10 +232,10 @@ static void top_k_reduction(
     }
 
     // Insertion sort on ascending distance (reasonable since K is small relatively speaking)
-    for (uint32_t i = 0; i < m; i++) {
+    for (uint32_t i = 1; i < m; i++) {
         ShardCandidate key = scratch_space[i];
         int j = (int)i - 1;
-        while (j >= 1 && scratch_space[j].dist > key.dist) {
+        while (j >= 0 && scratch_space[j].dist > key.dist) {
             scratch_space[j + 1] = scratch_space[j]; 
             j--;
         }
