@@ -1,4 +1,7 @@
 #include <dirent.h>
+#include <float.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <liburing.h>
@@ -208,10 +211,49 @@ typedef struct {
 
 static void top_k_reduction(
     uint32_t* accumulator_ids, float* accumulator_dists, uint32_t* accumulator_shard_id,
-    uint32_t* new_ids, float* new_dists, uint32_t* new_shard_id, 
+    uint32_t* new_ids, float* new_dists, uint32_t new_shard_id, 
     uint32_t K, ShardCandidate* scratch_space)
 {
+    // Populate the scratch space
+    uint32_t m = 0;
+    for (uint32_t i = 0; (i < K) && accumulator_ids[i] != UINT32_MAX; i++) {
+        scratch_space[m++] = (ShardCandidate) {
+            .id = accumulator_ids[i],
+            .dist = accumulator_dists[i],
+            .shard_id = accumulator_shard_id[i],
+        };
+    }
+    for (uint32_t i = 0; (i < K) && new_ids[i] != UINT32_MAX; i++) {
+        scratch_space[m++] = (ShardCandidate) {
+            .id = new_ids[i],
+            .dist = new_dists[i],
+            .shard_id = new_shard_id,
+        };
+    }
 
+    // Insertion sort on ascending distance (reasonable since K is small relatively speaking)
+    for (uint32_t i = 0; i < m; i++) {
+        ShardCandidate key = scratch_space[i];
+        int j = (int)i - 1;
+        while (j >= 1 && scratch_space[j].dist > key.dist) {
+            scratch_space[j + 1] = scratch_space[j]; 
+            j--;
+        }
+    }
+
+    // Record top-K
+    uint32_t top = (m < K) ? m : K;
+    for (uint32_t i = 0; i < top; i++) {
+        accumulator_ids[i] = scratch_space[i].id; 
+        accumulator_dists[i] = scratch_space[i].dist; 
+        accumulator_shard_id[i] = scratch_space[i].shard_id; 
+    }
+    for (uint32_t i = top; i < K; i++) { 
+        accumulator_ids[i] = UINT32_MAX; 
+        accumulator_dists[i] = FLT_MAX; 
+        accumulator_shard_id[i] = UINT32_MAX; 
+    }
+    
 }
 
 int main(int argc, char** argv)
@@ -406,7 +448,10 @@ int main(int argc, char** argv)
 
         // Reduce to a top K results
         for (uint32_t q = 0; q < n_queries; q++) {
-
+            top_k_reduction(&local_ids[(size_t)q*K], &local_dists[(size_t)q*K], &local_shard[(size_t)q*K], 
+                            &shard_ids[(size_t)q*K], &shard_dists[(size_t)q*K], shard_idx, 
+                            K, reduction_scratch
+            );
         }
 
         // Shard cleanups
