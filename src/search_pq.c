@@ -488,8 +488,55 @@ int main(int argc, char** argv)
     
     /* Merge to a global top-K at rank 0 */
     if (rank == 0) {
+        // Open up the result file
+        FILE* results = fopen(result_file, "w");
+        if (!results) {
+            perror("Failed to open file for writing results!\n");
+            return -1;
+        }
+        fprintf(results, "query_id,neighbor_rank,neighbor_id, distance\n");
+
+        // Insertion sort merging again
+        ShardCandidate* merge_buf = (ShardCandidate*) malloc(world_size*K*sizeof(ShardCandidate));
+        for (uint32_t q = 0; q < n_queries; q++) {
+            uint32_t m = 0;
+
+            // Collect top-K from all ranks for query q
+            for (int r = 0; r < world_size; r++) {
+                size_t base_offset = ((size_t)r * n_queries + q) * K;
+                for (uint32_t k = 0; k < K; k++) { 
+                    uint32_t candidate_id = all_ids[base_offset + k];
+                    if (candidate_id != UINT32_MAX) {
+                        merge_buf[m++] = (ShardCandidate) {
+                            .id = candidate_id,
+                            .dist = all_dists[base_offset + k],
+                            .shard_id = all_shards[base_offset + k],
+                        };
+                    }
+                }
+            }
+
+            // Insertion sort across all collected rank candidates
+            for (uint32_t i = 1; i < m; i++) {
+                ShardCandidate key = merge_buf[i];
+                int j = (int)i - 1;
+                while (j >= 0 && merge_buf[j].dist > key.dist) {
+                    merge_buf[j + 1] = merge_buf[j];
+                    j--;
+                }
+                merge_buf[j + 1] = key;
+            }
+
+            // Writing results to CSV
+            uint32_t top = (m < K) ? m : K;
+            for (uint32_t k = 0; k < top; k++) {
+                fprintf(results, "%u,%u,%u,%.6f",q, k, merge_buf[k].id, merge_buf[k].shard_id, merge_buf[k].dist);
+            }
+        }
 
         // Cleanups
+        fclose(results);
+        free(merge_buf);
         free(all_dists);
         free(all_shards);
         free(all_dists);
