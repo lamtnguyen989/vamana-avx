@@ -7,4 +7,4 @@ echo
 
 
 # Current still bootstrapping logic with python
-python3 queries/query.py data/vectors.vecf
+python3 queries/query.py data/vectors.vecf data/queries.vecf data/ground_truths.csv --k 20
