@@ -49,7 +49,7 @@ encode: $(SRC_DIR)/encode_pq.c
 search: $(SRC_DIR)/search_pq.c
 	$(SETUP_SPACK)
 	mkdir -p $(BUILD_DIR)
-	$(MPICC) $(CFLAGS)  $< -o $(BUILD_DIR)/$@ $(LINK_FLAG) -luring $(METRIC_IMPL)
+	$(MPICC) $(CFLAGS) -g -fsanitize=address $< -o $(BUILD_DIR)/$@ $(LINK_FLAG) -luring $(METRIC_IMPL)
 
 # Building index
 build_index: $(SRC_DIR)/build_index.c

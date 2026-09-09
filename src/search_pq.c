@@ -384,8 +384,8 @@ int main(int argc, char** argv)
     char vamana_path[1024]; memset(vamana_path, 0, sizeof(vamana_path));
     char pq_codes_path[1024]; memset(pq_codes_path, 0, sizeof(pq_codes_path));
 
-    uint32_t* shard_ids = (uint32_t*) malloc(n_queries*sizeof(uint32_t));
-    float* shard_dists = (float*) malloc(n_queries*sizeof(float));
+    uint32_t* shard_ids = (uint32_t*) malloc(n_queries*K*sizeof(uint32_t));
+    float* shard_dists = (float*) malloc(n_queries*K*sizeof(float));
 
     ShardCandidate* reduction_scratch = (ShardCandidate*) malloc(2*sizeof(ShardCandidate));
     
@@ -397,7 +397,7 @@ int main(int argc, char** argv)
         uint32_t shard_idx = rank_start + s;
         char* base_filename = vamana_shards.file_base[shard_idx];
         snprintf(vamana_path, sizeof(vamana_path), "%s/%s.vamindx", index_dir, base_filename);
-        snprintf(pq_codes_path, sizeof(pq_codes_path), "%s/%s.pqbin", index_dir, vamana_shards.file_base[shard_idx]);
+        snprintf(pq_codes_path, sizeof(pq_codes_path), "%s/%s.pqbin", pq_dir, vamana_shards.file_base[shard_idx]);
 
         // Not using fopen here for io_uring
         int vamana_fd = open(vamana_path, O_RDONLY);
@@ -421,7 +421,7 @@ int main(int argc, char** argv)
         }
 
         // Checking hashes
-        if (pq_codes_matches_codebook(&encodings, &codebook) != 0) {
+        if (!pq_codes_matches_codebook(&encodings, &codebook)) {
             fprintf(stderr, "Rank %d: Encodings at %s was not encoded with the provide codebook at %s!\n"
                             "Encoding hash: %016llx which not matches codebook hash %016llx.\n",
                             rank, pq_codes_path, codebook_path, encodings.codebook_hash, codebook.hash);
