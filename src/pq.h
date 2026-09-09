@@ -59,7 +59,8 @@ static inline void pq_build_distance_table(const PQCodebook* pq, dist_fn_t dista
     for (uint32_t m = 0; m < pq->M; m++) {
         const float* query_sub_vec = &query[(size_t)m * pq->sub_dim];
         for (uint32_t k = 0; k < pq->K; k++) {
-            table[(size_t)m * pq->K + k] = distance(query_sub_vec, pq_get_centroid(pq, m, k), pq->sub_dim);
+            float d = distance(query_sub_vec, pq_get_centroid(pq, m, k), pq->sub_dim);
+            table[(size_t)m * pq->K + k] = square(d);
         }
     }
 }
