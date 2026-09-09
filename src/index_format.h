@@ -64,16 +64,15 @@ typedef struct {
 
 static inline void candidate_list_init(CandidateList* list, uint32_t capacity)
 {
-    uint32_t cap = 0;
     if (capacity <= 0) {
         #if defined(DEBUG)
-            fprintf(stderr, "Size can not be zero, default to 8");
+            fprintf(stderr, "Capacity can not be zero, default to 32");
         #endif
-        cap = 8;
+        capacity = 32;
     }
     list->items = (Candidate*) malloc(capacity*sizeof(Candidate));
     list->size = 0;
-    list->capacity = cap;
+    list->capacity = capacity;
 }
 
 static inline void candidate_list_free(CandidateList *list)
