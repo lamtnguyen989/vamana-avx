@@ -67,7 +67,7 @@ fn resolve_output_path(user_path: &Path) -> std::io::Result<PathBuf> {
 }
 
 /// Generating clusters centers 
-//  Deliberately double precision and shouldn't matter due to we only use this as reference for blobs locations
+///  Deliberately double precision and shouldn't matter due to we only use this as reference for blobs locations
 /// Furthermore, the generations is purely sequential and independent from blob vectors generations that follows
 fn generate_centers(seed: u64, n_clusters: usize, dim: usize) -> Vec<Vec<f64>>
 {
@@ -148,6 +148,10 @@ fn main() -> std::io::Result<()> {
     args.output_file = resolve_output_path(&args.output_file)?;
 
     // Setting up Rayon threadpool
+    if args.threads < 1 {
+        eprintln!("Thread count can not be less than 1! Default thread count to 1.");
+        args.threads = 1;
+    }
     let rayon_setup = rayon::ThreadPoolBuilder::new()
                         .num_threads(args.threads)
                         .build_global();
