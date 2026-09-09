@@ -134,11 +134,32 @@ static void beam_search_pq(int vamana_fd,
         IndexRecord record;
         for (uint32_t k = 0; k < batch_count; k++) {
             index_record_decode(hdr, batch_buffer + k*record_size, &record);
-            uint32_t nb = record.neighbors[k];
-            float d = pq_adc_distance(codebook, table, pq_codes_at(encodings, nb));
-            insert_candidate(&cand_list, nb, d);
+            // Walk ALL neighbors of this record, not just index [k]
+            for (uint32_t j = 0; j < record.degree; j++) {
+                uint32_t nb = record.neighbors[j];
+                float d = pq_adc_distance(codebook, table, pq_codes_at(encodings, nb));
+                insert_candidate(&cand_list, nb, d);
+            }
         }
     }
+
+    // Copy the top-K results out, padding any remainder with sentinels
+    uint32_t top = (cand_list.size < K) ? cand_list.size : K;
+    for (uint32_t k = 0; k < top; k++) {
+        out_ids[k]   = cand_list.items[k].id;
+        out_dists[k] = cand_list.items[k].dist;
+    }
+    for (uint32_t k = top; k < K; k++) {
+        out_ids[k]   = UINT32_MAX;
+        out_dists[k] = FLT_MAX;
+    }
+
+    // Cleanups
+    candidate_list_free(&cand_list);
+    free(table);
+    free(batch_buffer);
+    free(batch_vamana_ids);
+    free(unvisited_ids);
 }
 
 
@@ -375,7 +396,7 @@ int main(int argc, char** argv)
     // Set-up rank-level scratch spaces
     uint32_t* local_ids = (uint32_t*)malloc(n_queries * K * sizeof(uint32_t));
     uint32_t* local_shard = (uint32_t*)malloc(n_queries * K * sizeof(uint32_t));
-    float* local_dists = (float*) (uint32_t*) malloc(n_queries * K * sizeof(float));
+    float* local_dists = (float*) malloc(n_queries * K * sizeof(float));
     for (size_t k = 0; k < (size_t)K*n_queries; k++) {
         local_ids[k] = UINT32_MAX;
         local_shard[k] = UINT32_MAX;
@@ -387,7 +408,7 @@ int main(int argc, char** argv)
     uint32_t* shard_ids = (uint32_t*) malloc(n_queries*K*sizeof(uint32_t));
     float* shard_dists = (float*) malloc(n_queries*K*sizeof(float));
 
-    ShardCandidate* reduction_scratch = (ShardCandidate*) malloc(2*sizeof(ShardCandidate));
+    ShardCandidate* reduction_scratch = (ShardCandidate*) malloc(2*K*sizeof(ShardCandidate));
     
     MPI_Barrier(MPI_COMM_WORLD); // Mainly to start the timings
     double t0 = MPI_Wtime();
@@ -402,8 +423,9 @@ int main(int argc, char** argv)
         // Not using fopen here for io_uring
         int vamana_fd = open(vamana_path, O_RDONLY);
         if (vamana_fd < 0) {
-            fprintf(stderr, "Rank %d: Can not open %s", rank, vamana_path);
+            fprintf(stderr, "Rank %d: Can not open %s\n", rank, vamana_path);
             MPI_Abort(MPI_COMM_WORLD, 5);
+            return 5;
         }
 
         // Read the IndexHeader
@@ -411,6 +433,7 @@ int main(int argc, char** argv)
         if (pread(vamana_fd, &hdr, sizeof(IndexHeader), 0) != sizeof(IndexHeader)) {
             fprintf(stderr, "Rank %d: Failed to read Vamana Index header from %s\n", rank, vamana_path);
             MPI_Abort(MPI_COMM_WORLD, 6);
+            return 6;
         }
 
         // Read in the PQ encodings
@@ -418,6 +441,7 @@ int main(int argc, char** argv)
         if (pq_codes_load(pq_codes_path, &encodings) != 0) {
             fprintf(stderr, "Rank %d: Failed to read the encodings at %s\n", rank, pq_codes_path);
             MPI_Abort(MPI_COMM_WORLD, 7);
+            return 7;
         }
 
         // Checking hashes
@@ -426,14 +450,16 @@ int main(int argc, char** argv)
                             "Encoding hash: %016llx which not matches codebook hash %016llx.\n",
                             rank, pq_codes_path, codebook_path, encodings.codebook_hash, codebook.hash);
             MPI_Abort(MPI_COMM_WORLD, 8);
+            return 8;
         }
 
         // Check points metadata against the header
         if (encodings.n_points != hdr.n_points) {
             fprintf(stderr, "Rank %d: PQ encoding point count %u does not match Vamana graph point count %u! "
-                            "Base file name of %s"
+                            "Base file name of %s\n"
                             ,rank, encodings.n_points, hdr.n_points, base_filename);
             MPI_Abort(MPI_COMM_WORLD, 9);
+            return 9;
         }
 
         // Clearing out previous shard's data
@@ -494,7 +520,7 @@ int main(int argc, char** argv)
             perror("Failed to open file for writing results!\n");
             return -1;
         }
-        fprintf(results, "query_id,neighbor_rank,neighbor_id, distance\n");
+        fprintf(results, "query_id,neighbor_rank,neighbor_id,distance\n");
 
         // Insertion sort merging again
         ShardCandidate* merge_buf = (ShardCandidate*) malloc(world_size*K*sizeof(ShardCandidate));
@@ -530,7 +556,7 @@ int main(int argc, char** argv)
             // Writing results to CSV
             uint32_t top = (m < K) ? m : K;
             for (uint32_t k = 0; k < top; k++) {
-                fprintf(results, "%u,%u,%u,%.6f",q, k, merge_buf[k].id, merge_buf[k].shard_id, merge_buf[k].dist);
+                fprintf(results, "%u,%u,%u,%.6f\n", q, k + 1, merge_buf[k].id, merge_buf[k].dist);
             }
         }
 
