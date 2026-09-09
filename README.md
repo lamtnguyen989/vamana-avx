@@ -1,5 +1,5 @@
 # vamana-avx
-From-scratch implementation Vamana vector search algorithm (more specifically [DiskANN](https://milvus.io/blog/diskann-explained.md)) for learning [AVX-intrinsics](https://www.intel.com/content/www/us/en/docs/intrinsics-guide/index.html) programming (and a bit of under the hood ML algorithms) alongside some other cool high-performance software technologies!
+From-scratch implementation of the Vamana vector search algorithm (more specifically [DiskANN](https://milvus.io/blog/diskann-explained.md)) for learning [AVX-intrinsics](https://www.intel.com/content/www/us/en/docs/intrinsics-guide/index.html) programming (and a bit of under the hood ML algorithms) alongside some other cool high-performance software technologies!
 
 
 ## Checklist
@@ -15,7 +15,7 @@ From-scratch implementation Vamana vector search algorithm (more specifically [D
 - [x] Create indexing formats to be used for searching.
 - [x] Building index for Vamana graph search.
 - [x] Writing a (distributed) Vamana graph search algorithm on our custom data (MPI, OpenMP alongside `io_uring` for beam width batch and reranking).
-- [ ] Benchmark the pipeline's _recall@k_ scores (still very terrible scores, need improvements so not checking off the list yet).
+- [ ] Benchmark the pipeline's _recall@k_ scores (still very terrible eye tests on produced results, need improvements so not checking off the list yet).
 - [ ] (Optional) Observe the searching program with eBPF through Rust Aya.
 
 ## Current pipeline 
