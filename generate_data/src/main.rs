@@ -67,7 +67,7 @@ fn resolve_output_path(user_path: &Path) -> std::io::Result<PathBuf> {
 }
 
 /// Generating clusters centers 
-//  Deliberately double precision and shouldn't matter due to we only use this as reference for blobs locations
+///  Deliberately double precision and shouldn't matter due to we only use this as reference for blobs locations
 /// Furthermore, the generations is purely sequential and independent from blob vectors generations that follows
 fn generate_centers(seed: u64, n_clusters: usize, dim: usize) -> Vec<Vec<f64>>
 {
