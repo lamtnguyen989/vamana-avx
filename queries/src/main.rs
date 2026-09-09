@@ -1,10 +1,11 @@
-use std::path::{Path, PathBuf};
+use std::{io::{BufWriter, Write}, path::{Path, PathBuf}};
 
 use clap::{Parser, ValueEnum};
 use memmap2::Mmap;
 use rayon::prelude::*;
 
 const HEADER_BYTES: usize = 8;
+const WRITE_BUFFER_SIZE: usize = 16 * 1024 * 1024;
 
 #[derive(Copy, Clone, Debug, ValueEnum)]
 enum Metric {
@@ -63,17 +64,92 @@ struct Vecf
 
 impl Vecf
 {
+    /// Loading vecfile via mmap
     fn open(path: &Path) -> std::io::Result<Self> {
-        todo!();
+        let file = std::fs::File::open(path)?;
+        let mmap = unsafe { Mmap::map(&file)? };
+
+        // Very crude file size error checking
+        if mmap.len() < HEADER_BYTES {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "File size smaller than header size",
+            ));
+        }
+        // Decode the headers
+        let n_vectors = u32::from_le_bytes(mmap[0..4].try_into().unwrap());
+        let dim = u32::from_le_bytes(mmap[4..8].try_into().unwrap());
+
+        // Size checking again
+        let expected_bytes = HEADER_BYTES + (n_vectors as usize) * (dim as usize) * 4;
+        if mmap.len() < expected_bytes {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                format!("File size mismatch: expected {expected_bytes} bytes, found {}", mmap.len()),
+            ));
+        }
+        
+
+        return Ok(Self {_mmap: mmap, n_vectors, dim});
     }
+}
+
+/// Writing .vecf serialization
+fn write_vecf(path: &Path, vectors_data: &[f32], n_vectors: u32, dim: u32) -> std::io::Result<()>
+{
+
+    Ok(())
+}
+
+/// Computing queries ground truths under L2 metric
+fn compute_ground_truths_l2(
+    data: &[f32],
+    n_vectors: usize,
+    dim: usize,
+    queries: &[f32],
+    n_queries: usize,
+    k: usize,
+) -> (Vec<u32>, Vec<f32>) 
+{
+    todo!();
+}
+
+
+/// Saving ground truths results to CSV
+fn save_ground_truths_csv(
+    path: &Path, 
+    gt_indices: &[u32], 
+    gt_distances: &[f32], 
+    n_queries: usize, 
+    k: usize,
+) -> std::io::Result<()> 
+{
+    let result_file = std::fs::File::create(path)?;
+    let mut writer = BufWriter::with_capacity(WRITE_BUFFER_SIZE, result_file);
+
+    writeln!(writer, "query_id,neighbor_rank,neighbor_id,distance")?;
+    for q in 0..n_queries {
+        for r in 0..k {
+            let q_idx = q*k + r;
+            writeln!(writer, "{},{},{},{}", q, r+1, gt_indices[q_idx], gt_distances[q_idx])?;
+        }
+    }
+    writer.flush()?;
+
+    Ok(())
 }
 
 fn main() -> std::io::Result<()> {
 
     // Parsing CLI 
-    let args = Args::parse();
+    let mut args = Args::parse();
 
     // Setting up Rayon threadpool
+    if args.threads < 1 {
+        eprintln!("Thread count can not be less than 1! Default thread count to 1.");
+        args.threads = 1;
+    }
+
     let rayon_setup = rayon::ThreadPoolBuilder::new()
                         .num_threads(args.threads)
                         .build_global();
