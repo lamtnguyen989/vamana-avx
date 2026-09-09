@@ -126,18 +126,18 @@ static void beam_search_pq(int vamana_fd,
             cand_list.items[unvisited_ids[k]].visited = 1;
             batch_vamana_ids[k] = cand_list.items[unvisited_ids[k]].id;
         }
-    }
 
-    // Read from Vamana index in batch of `batch_count` <= `beam_width`
-    uring_read_vamana_index(uring, vamana_fd, hdr, batch_vamana_ids, batch_count, record_size, batch_buffer, record_size);
+        // Read from Vamana index in batch of `batch_count` <= `beam_width`
+        uring_read_vamana_index(uring, vamana_fd, hdr, batch_vamana_ids, batch_count, record_size, batch_buffer, record_size);
 
-    // Decode all buffer to retrieve records and insert to the list
-    IndexRecord record;
-    for (uint32_t k = 0; k < batch_count; k++) {
-        index_record_decode(hdr, batch_buffer + k*record_size, &record);
-        uint32_t nb = record.neighbors[k];
-        float d = pq_adc_distance(codebook, table, pq_codes_at(encodings, nb));
-        insert_candidate(&cand_list, nb, d);
+        // Decode all buffer to retrieve records and insert to the list
+        IndexRecord record;
+        for (uint32_t k = 0; k < batch_count; k++) {
+            index_record_decode(hdr, batch_buffer + k*record_size, &record);
+            uint32_t nb = record.neighbors[k];
+            float d = pq_adc_distance(codebook, table, pq_codes_at(encodings, nb));
+            insert_candidate(&cand_list, nb, d);
+        }
     }
 }
 
@@ -186,7 +186,7 @@ static VamanaList discover_shards_indexes(const char* index_dir_path, const char
         char* file_base = (char*) malloc(file_base_len + 1);
         memcpy(file_base, entry->d_name, file_base_len);
         file_base[file_base_len] = '\0'; // Make sure to NULL-terminate
-        result.file_base[result.count++] - file_base;
+        result.file_base[result.count++] = file_base;
     }
     closedir(index_directory);
 
@@ -325,7 +325,7 @@ int main(int argc, char** argv)
         // Make space in other ranks for broadcasting the data
         queries = (float*) malloc(n_queries*dim*sizeof(float));
     } 
-    MPI_Bcast(&queries, (int)(n_queries*dim), MPI_FLOAT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(queries, (int)(n_queries*dim), MPI_FLOAT, 0, MPI_COMM_WORLD);
 
     /* Every rank load a global pq codebook (better ways possible, but simplicity for now) */
     PQCodebook codebook;
@@ -351,12 +351,12 @@ int main(int argc, char** argv)
     if (rank == 0) {
         for (uint32_t k = 0; k < n_shards; k++) {
             char check_path[1024];
-            snprintf(check_path, sizeof(check_path), "%s/%s.pqbin");
+            snprintf(check_path, sizeof(check_path), "%s/%s.pqbin", pq_dir, vamana_shards.file_base[k]);
             if (access(check_path, F_OK) != 0) {
                 fprintf(stderr, "Shard `%s.vamindx` does not have accessible corresponding encoding of `%s.pqbin` in %s\n",
                                 vamana_shards.file_base[k], index_dir, vamana_shards.file_base[k], pq_dir);
+                MPI_Abort(MPI_COMM_WORLD, 4);
             }
-            MPI_Abort(MPI_COMM_WORLD, 4);
         }
     }
 
@@ -365,7 +365,7 @@ int main(int argc, char** argv)
     uint32_t remainder = n_shards % (uint32_t)world_size;
     uint32_t rank_count = base + (((uint32_t)rank < remainder) ? 1 : 0);
     uint32_t rank_start = (uint32_t)rank * base + (((uint32_t)rank < remainder) ? (uint32_t)rank : remainder);
-    printf("Rank %d: Processing %d shards", rank, rank_count);
+    printf("Rank %d: Processing %d shards\n", rank, rank_count);
     if (rank_count == 0) {fprintf(stderr, "Rank %d is idle!", rank);}
     
     /* Search */
@@ -409,14 +409,14 @@ int main(int argc, char** argv)
         // Read the IndexHeader
         IndexHeader hdr;
         if (pread(vamana_fd, &hdr, sizeof(IndexHeader), 0) != sizeof(IndexHeader)) {
-            fprintf(stderr, "Rank %d: Failed to read Vamana Index header from %s", rank, vamana_path);
+            fprintf(stderr, "Rank %d: Failed to read Vamana Index header from %s\n", rank, vamana_path);
             MPI_Abort(MPI_COMM_WORLD, 6);
         }
 
         // Read in the PQ encodings
         PQCodes encodings;
         if (pq_codes_load(pq_codes_path, &encodings) != 0) {
-            fprintf(stderr, "Rank %d: Failed to read the encodings at %s", rank, pq_codes_path);
+            fprintf(stderr, "Rank %d: Failed to read the encodings at %s\n", rank, pq_codes_path);
             MPI_Abort(MPI_COMM_WORLD, 7);
         }
 
@@ -437,8 +437,8 @@ int main(int argc, char** argv)
         }
 
         // Clearing out previous shard's data
-        memset(shard_ids, 0, sizeof(shard_ids));
-        memset(shard_dists, 0, sizeof(shard_dists));
+        memset(shard_ids, 0, n_queries * K * sizeof(uint32_t));
+        memset(shard_dists, 0, n_queries * K * sizeof(float));
 
         // Execute parallel search (across queries)
         #pragma omp parallel for num_threads(n_threads)
@@ -539,7 +539,7 @@ int main(int argc, char** argv)
         free(merge_buf);
         free(all_dists);
         free(all_shards);
-        free(all_dists);
+        free(all_ids);
     }
 
     /* Cleanups */
