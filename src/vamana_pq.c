@@ -283,7 +283,15 @@ static void build_shard_vamana_index(VecFile* vf, const ShardJobConfig* cfg, con
     free(locks);
 
     /* Serialize index */
-    
+    char out_path[2048];
+    snprintf(out_path, sizeof(out_path), "%s/%s.vamindx", cfg->index_dir, base_filename);
+    FILE* vamana_out = fopen(out_path, "wb");
+    if (vamana_out == NULL) {
+        perror("Failed to open file to export the computed Vamana index\n");
+        exit(1);
+    }
+
+    IndexHeader hdr;
 
     // Cleanups
     for (uint32_t k = 0; k < vf->num_vectors; k++) { free(graph[k].ids); }
@@ -352,6 +360,10 @@ int main(int argc, char** argv)
     int rank, world_size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+
+    // Initializing config
+    dist_fn_t dist_fn = metric();
+
 
 
     /* Cleanups */
