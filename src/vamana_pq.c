@@ -1,6 +1,7 @@
 // Building Vamana index and PQ encode shards all in a single MPI executable
 
 #include <stdio.h>
+#include <stdint.h>
 #include <mpi.h>
 #include <omp.h>
 
@@ -10,6 +11,8 @@
 #include "pq.h"
 #include "vecfile.h"
 #include "vamana.h"
+
+#define VECFILE_HEADER_BYTES (2*sizeof(uint32_t))
 
 DEFINE_OPTION(uint32_t);
 
@@ -175,8 +178,87 @@ static void candidates_from_neighbors(const VecFile* vf, dist_fn_t dist_fn,
     }
 }
 
+// Globbing (per-shard) pipeline data to a configuration
+typedef struct {
+    const char* index_dir;
+    const char* encoding_dir;
+    float alpha;
+    int n_threads;
+    OPTION(uint32_t) seed_opt;
+    PQCodebook* pq_codebook;
+    dist_fn_t dist_fn;
+} ShardJobConfig;
+
+// Vamana index building pipeline
+static void build_shard_vamana_index(VecFile* vf, const ShardJobConfig* cfg, const char* base_filename, int rank)
+{
+
+}
+
+
+// Shard encoding pipeline
+static void encode_shard(VecFile* vf, const ShardJobConfig* cfg, const char* base_filename, int rank)
+{
+    PQCodebook* pq = cfg->pq_codebook;
+
+    // Dimension checks
+    if (vf->dim != pq->dim) {
+        fprintf(stderr, "Dimensional mismatch: Shard has dim=%u, codebook trained on dim=%u\n", vf->dim, pq->dim);
+        return;
+    }
+
+    // Make space to store the encodings
+    uint8_t* encodings = (uint8_t*) malloc(vf->num_vectors * pq->M * sizeof(uint8_t));
+    if (encodings == NULL) {
+        fprintf(stderr, "Rank %d: Encodings buffer failed to allocate for shard %s", rank, base_filename);
+    }
+
+    // Encode (parallelized across vectors in dataset)
+    #pragma omp parallel for num_threads(cfg->n_threads)
+    for (uint32_t k = 0; k < vf->num_vectors; k++) {
+        pq_encode(pq, cfg->dist_fn, vecfile_data_at(vf, k), &encodings[k * pq->M * sizeof(uint8_t)]);
+    }
+
+    // Serialize the encodings
+    char out_path[2048];
+    snprintf(out_path, sizeof(out_path), "%s/%s.pqbin", cfg->encoding_dir, base_filename);
+    FILE* encodings_file = fopen(out_path, "wb");
+    if (encodings_file == NULL) {
+        perror("encoding_shard: fopen");
+        return;
+    }
+    uint32_t magic = PQ_MAGIC;
+    fwrite(&magic, sizeof(uint32_t), 1, encodings_file);
+    fwrite(&vf->num_vectors, sizeof(uint32_t), 1, encodings_file);
+    fwrite(&pq->M, sizeof(uint32_t), 1, encodings_file);
+    fwrite(&pq->hash, sizeof(uint64_t), 1, encodings_file); /* Tie the codes file to this exact codebook */
+    fwrite(encodings, 1, vf->num_vectors * pq->M * sizeof(uint8_t), encodings_file);
+
+    // Notify
+    printf("Rank %d: Wrote PQ encodings with hash=%016llx to %s\n", rank, pq->hash, out_path);
+
+    // Cleanups
+    free(encodings);
+    fclose(encodings_file);
+}
+
 
 int main(int argc, char** argv) 
 {
+    /* Start MPI multi-threaded environment */
+    int provided;
+    MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &provided);
+    if (provided != MPI_THREAD_FUNNELED) {
+        fprintf(stderr, "MPI implementation doesn't support MPI_THREAD_FUNNELED (got %d)\n", provided);
+        MPI_Abort(MPI_COMM_WORLD, 1);
+    }
+
+    int rank, world_size;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+
+
+    /* Cleanups */
+    MPI_Finalize();
     return 0;
 }
