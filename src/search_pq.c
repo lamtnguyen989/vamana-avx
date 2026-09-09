@@ -1,5 +1,6 @@
 #include <dirent.h>
 #include <float.h>
+#include <math.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -147,7 +148,7 @@ static void beam_search_pq(int vamana_fd,
     uint32_t top = (cand_list.size < K) ? cand_list.size : K;
     for (uint32_t k = 0; k < top; k++) {
         out_ids[k]   = cand_list.items[k].id;
-        out_dists[k] = cand_list.items[k].dist;
+        out_dists[k] = sqrtf(cand_list.items[k].dist);
     }
     for (uint32_t k = top; k < K; k++) {
         out_ids[k]   = UINT32_MAX;
