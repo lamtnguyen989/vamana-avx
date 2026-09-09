@@ -13,9 +13,12 @@
 #ifndef VECFILE_H
 #define VECFILE_H
 
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 // Helper wrappers for error checking
 #define TRY_READ(dst, size, count, file_stream, err_msg)                \
@@ -97,6 +100,16 @@ static inline void vecfile_free(VecFile* vf)
     vf->data = NULL;
     vf->num_vectors = 0;
     vf->dim = 0;
+}
+
+static int read_vecfile_header(int fd, uint32_t* out_n_vectors, uint32_t* out_dim)
+{
+    uint32_t hdr_fields[2];
+    ssize_t r = pread(fd, hdr_fields, sizeof(hdr_fields), 0);
+    if ((size_t)r != sizeof(hdr_fields)) { return -1; }
+    *out_n_vectors = hdr_fields[0];
+    *out_dim = hdr_fields[1];
+    return 0;
 }
 
 #endif

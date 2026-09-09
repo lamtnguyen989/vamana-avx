@@ -1,10 +1,12 @@
 // Building Vamana index and PQ encode shards all in a single MPI executable
 
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <mpi.h>
 #include <omp.h>
 #include <time.h>
+#include <unistd.h>
 
 #include "distance.h"
 #include "index_format.h"
@@ -291,7 +293,31 @@ static void build_shard_vamana_index(VecFile* vf, const ShardJobConfig* cfg, con
         exit(1);
     }
 
-    IndexHeader hdr;
+    // Writing header
+    IndexHeader hdr = {
+        .n_points = vf->num_vectors,
+        .dim = vf->dim,
+        .R = R,
+        .medoid_id = medoid,
+    };
+    fwrite(&hdr, sizeof(IndexHeader), 1, vamana_out);
+
+    // Writing index record
+    uint32_t* neighbor_buf = (uint32_t*) malloc(R * sizeof(uint32_t));
+    for (uint32_t k = 0; k < vf->num_vectors; k++) {
+        // Writing vector point
+        fwrite(vecfile_data_at(vf, k), sizeof(float), vf->dim, vamana_out);
+        // Writing point graph degree
+        uint32_t degree = graph[k].count;
+        fwrite(&degree, sizeof(uint32_t), 1, vamana_out);
+        // Writing point neighbors
+        memset(neighbor_buf, 0, R*sizeof(uint32_t));
+        memcpy(neighbor_buf, graph[k].ids, degree * sizeof(uint32_t));
+        fwrite(neighbor_buf, sizeof(uint32_t), R, vamana_out);
+    }
+    free(neighbor_buf);
+    fclose(vamana_out);
+    printf("Rank %d: Wrote index to %s\n", rank, out_path);
 
     // Cleanups
     for (uint32_t k = 0; k < vf->num_vectors; k++) { free(graph[k].ids); }
@@ -361,12 +387,83 @@ int main(int argc, char** argv)
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 
+    /* CLI parsing */
+    if (argc < 6) {
+        if (rank == 0) {
+            fprintf(stderr, "usage: mpiexec -n <n_ranks> %s <vectors.vecf> <n_shards> <index_dir> <encoding_dir> <codebook.pqbook> [R=32] [L=64] [alpha=1.20] [threads=4] [seed]\n"
+                            "\n"
+                            "  vectors.vecf:        Dataset in .vecf serialization format\n"
+                            "  n_shards:            Numbers of data shards pieces\n"
+                            "  index_dir:           Directory for exporting the computed Vamana indexes\n"
+                            "  encodings_dir:       Directory for exporting the computed quantizations encodings\n"
+                            "  codebook.pqbook:     Quantization codebook\n"
+                            "  R:                   Max out degree\n"
+                            "  L:                   Search list length\n"
+                            "  alpha:               Pruning distance scaling parameter\n"
+                            "  threads:             Threads per rank\n"
+                            "  seed:                Optional seed\n"
+                            , argv[0]
+            );
+        }
+        MPI_Finalize();
+        return 1;
+    }
+    const char* data_path = argv[1];
+    uint32_t n_shards = (uint32_t) atoi(argv[2]);
+    const char* index_dir = argv[3];
+    const char* encoding_dir = argv[4];
+    const char* codebook_path = argv[5];
+    uint32_t R = (argc > 6) ? (uint32_t) atoi(argv[6]) : 32;
+    uint32_t L = (argc > 7) ? (uint32_t) atoi(argv[7]) : 64;
+    float alpha = (argc > 8) ? (float) atof(argv[8]) : 1.20f;
+    int n_threads = (argc > 9) ? atoi(argv[9]) : 4;
+    OPTION(uint32_t) seed_opt = (argc > 10)
+        ? OPTION_SOME(uint32_t, (uint32_t) strtoul(argv[10], NULL, 10))
+        : OPTION_NONE(uint32_t);
+    
+    if (n_shards == 0) {
+        if (rank == 0) { fprintf(stderr, "Shard count must be at least 1!\n"); }
+        MPI_Finalize();
+        return 1;
+    }
+
+    // Read the codebook
+    PQCodebook pq = {0};
+    if (pq_codebook_load(codebook_path, &pq) != 0) {
+        fprintf(stderr, "Rank: %d failed to load codebook %s\n", rank, codebook_path);
+        MPI_Abort(MPI_COMM_WORLD, 3);
+    }
+
+    // Read the dataset files (Either assuming single-node or distributed file system)
+    int data_fd = open(data_path, O_RDONLY);
+    if (data_fd < 0) {
+        fprintf(stderr, "Rank %d: Failed to read the dataset at %s", data_fd, data_path);
+        MPI_Abort(MPI_COMM_WORLD, 1);
+    }
+    uint32_t n_vectors; 
+    uint32_t dim;
+    if (read_vecfile_header(data_fd, &n_vectors, &dim) < 0) {
+        fprintf(stderr, "Rank %d: failed to read vecfile header from %s\n", rank, data_path);
+        close(data_fd);
+        pq_codebook_free(&pq);
+        MPI_Abort(MPI_COMM_WORLD, 2);
+    }
+
     // Initializing config
-    dist_fn_t dist_fn = metric();
-
-
+    ShardJobConfig cfg = {
+        .index_dir = index_dir,
+        .encoding_dir = encoding_dir,
+        .R = R,
+        .L = L,
+        .alpha = alpha,
+        .n_threads = n_threads,
+        .seed_opt = seed_opt,
+        .pq_codebook = &pq,
+        .dist_fn = metric(),
+    };
 
     /* Cleanups */
+    close(data_fd);
     MPI_Finalize();
     return 0;
 }
