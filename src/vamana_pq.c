@@ -464,7 +464,7 @@ int main(int argc, char** argv)
     };
 
     // Notify of rank setups done
-    printf("Rank %d: Done setting up config. Now start the work...\n", rank);
+    printf("Rank %d: Done setting up config. Now starting the work...\n", rank);
 
     // Split `total_n_vectors` into `num_shards` contiguous chunks
     uint32_t vec_base = total_n_vectors / n_shards;

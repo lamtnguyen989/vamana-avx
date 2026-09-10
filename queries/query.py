@@ -85,7 +85,7 @@ if __name__ == "__main__":
     ap.add_argument("ground_truth_csv")
     ap.add_argument("--n-queries", type=int, default=1000)
     ap.add_argument("--k", type=int, default=100)
-    ap.add_argument("--std-dev", type=float, default=5.5)
+    ap.add_argument("--std-dev", type=float, default=0.5)
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--metric", choices=["L2", "cosine"], default="L2")
     ap.add_argument("--batch_size", type=int, default=2000)

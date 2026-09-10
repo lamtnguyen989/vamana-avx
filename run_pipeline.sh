@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 
+DIM=${1:-128}
+
 # Create high dimensional dataset and serialize to `.vecf` format (along with the shardings)
-./scripts/generate.sh
+./scripts/generate.sh $DIM
 
 # Create queries and associated ground truths to the generated dataset
 ./scripts/ground_truths.sh
