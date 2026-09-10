@@ -17,6 +17,7 @@ From-scratch implementation of the Vamana vector search algorithm (more specific
 - [x] Writing a (distributed) Vamana graph search algorithm on our custom data (MPI, OpenMP alongside `io_uring` for beam width batch and reranking).
 - [ ] Benchmark the pipeline's _recall@k_ scores (still very terrible eye tests on produced results, need improvements so not checking off the list yet).
 - [ ] (Optional) Observe the searching program with eBPF through Rust Aya.
+- [ ] (Optional) Currently work with only L2 metric implementation, it would be great to expand to other metrics (cosine, L1, etc.)
 
 ## Current pipeline 
 ```bash

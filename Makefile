@@ -56,9 +56,11 @@ build_index: $(SRC_DIR)/build_index.c
 	mkdir -p $(BUILD_DIR)
 	$(CC) $(CFLAGS)  $< -o $(BUILD_DIR)/$@ $(LINK_FLAG) $(METRIC_IMPL)
 
-# Background verifications
-verif: ignore/verif.c
-	$(CC) $(CFLAGS)  $< -o $(BUILD_DIR)/$@ $(LINK_FLAG)
+# Building Vamana index graph and encodings
+vamana: $(SRC_DIR)/vamana_pq.c
+	$(SETUP_SPACK)
+	mkdir -p $(BUILD_DIR)
+	$(MPICC) $(CFLAGS)  $< -o $(BUILD_DIR)/$@ $(LINK_FLAG) $(METRIC_IMPL)	
 
 clean:
 	rm -rf $(BUILD_DIR)
