@@ -5,6 +5,8 @@ SRC_DIR = src
 BUILD_DIR = build
 MPICC := mpicc
 
+DEBUG_FLAGS = -DDEBUG -g -fsanitize=address
+
 METRIC_IMPL ?= -DL2_IMPLEMENTATION
 
 # Spack information
@@ -37,19 +39,19 @@ endef
 train: $(SRC_DIR)/train_pq.c
 	$(SETUP_SPACK)
 	mkdir -p $(BUILD_DIR)
-	$(MPICC) $(CFLAGS)  $< -o $(BUILD_DIR)/$@ $(LINK_FLAG) $(METRIC_IMPL)
+	$(MPICC) $(CFLAGS) $< -o $(BUILD_DIR)/$@ $(LINK_FLAG) $(METRIC_IMPL)
 
 # Searching binary
 search: $(SRC_DIR)/search_pq.c
 	$(SETUP_SPACK)
 	mkdir -p $(BUILD_DIR)
-	$(MPICC) $(CFLAGS) -g -fsanitize=address $< -o $(BUILD_DIR)/$@ $(LINK_FLAG) -luring $(METRIC_IMPL)
+	$(MPICC) $(CFLAGS) $< -o $(BUILD_DIR)/$@ $(LINK_FLAG) -luring $(METRIC_IMPL)
 
 # Building Vamana index graph and encodings
 vamana: $(SRC_DIR)/vamana_pq.c
 	$(SETUP_SPACK)
 	mkdir -p $(BUILD_DIR)
-	$(MPICC) $(CFLAGS)  $< -o $(BUILD_DIR)/$@ $(LINK_FLAG) $(METRIC_IMPL)	
+	$(MPICC) $(CFLAGS) $< -o $(BUILD_DIR)/$@ $(LINK_FLAG) $(METRIC_IMPL)	
 
 clean:
 	rm -rf $(BUILD_DIR)
