@@ -1,6 +1,5 @@
 #include <dirent.h>
 #include <float.h>
-#include <math.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -144,7 +143,8 @@ static void beam_search_pq(int vamana_fd,
         }
     }
 
-    // Copy the top-K results out, padding any remainder with sentinels
+    // Copy the top-K results out, padding any remainder with sentinels.
+    // ADC distances are squared L2 so that's why we sqrtf() here
     uint32_t top = (cand_list.size < K) ? cand_list.size : K;
     for (uint32_t k = 0; k < top; k++) {
         out_ids[k]   = cand_list.items[k].id;
@@ -261,6 +261,7 @@ static void top_k_reduction(
             scratch_space[j + 1] = scratch_space[j]; 
             j--;
         }
+        scratch_space[j + 1] = key;
     }
 
     // Record top-K
@@ -463,6 +464,15 @@ int main(int argc, char** argv)
             return 9;
         }
 
+        // Check global_offset agreement
+        if (encodings.global_offset != hdr.global_offset) {
+            fprintf(stderr, "Rank %d: PQ encoding global_offset %u does not match Vamana graph global_offset %u! "
+                            "Base file name of %s\n"
+                            ,rank, encodings.global_offset, hdr.global_offset, base_filename);
+            MPI_Abort(MPI_COMM_WORLD, 11);
+            return 11;
+        }
+
         // Clearing out previous shard's data
         memset(shard_ids, 0, n_queries * K * sizeof(uint32_t));
         memset(shard_dists, 0, n_queries * K * sizeof(float));
@@ -473,6 +483,13 @@ int main(int argc, char** argv)
             beam_search_pq(vamana_fd, &hdr, &codebook, &encodings, dist_fn, 
                             &queries[(size_t)q*dim], L, K, beam_width,
                             &shard_ids[(size_t)q*K], &shard_dists[(size_t)q*K]);
+        }
+
+        // Translate this shard's local ids into global dataset ids
+        for (size_t i = 0; i < (size_t)n_queries * K; i++) {
+            if (shard_ids[i] != UINT32_MAX) {
+                shard_ids[i] += hdr.global_offset;
+            }
         }
 
         // Reduce to a top K results

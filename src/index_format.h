@@ -14,6 +14,7 @@ typedef struct {
     uint32_t dim;
     uint32_t R;
     uint32_t medoid_id;
+    uint32_t global_offset; // To calculate global index in the original dataset
 } IndexHeader;
 
 // Record for a single vector (query)

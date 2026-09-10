@@ -53,7 +53,7 @@ static inline void pq_encode(const PQCodebook* pq, dist_fn_t distance, const flo
     }
 }
 
-// Building (ADC) distance look up table for the query
+// Building (ADC) distance look up table for the query (L2 square)
 static inline void pq_build_distance_table(const PQCodebook* pq, dist_fn_t distance, const float* query, float* table)
 {
     for (uint32_t m = 0; m < pq->M; m++) {
@@ -65,7 +65,7 @@ static inline void pq_build_distance_table(const PQCodebook* pq, dist_fn_t dista
     }
 }
 
-// ADC distances
+// ADC distances (L2 square)
 static inline float pq_adc_distance(const PQCodebook* pq, float* adc_table, uint8_t* codes) 
 {
     float result = 0.0f;
@@ -191,6 +191,7 @@ static inline int pq_codebook_load(const char* path, PQCodebook *pq)
 typedef struct {
     uint32_t n_points;
     uint32_t M;
+    uint32_t global_offset;  // must match the corresponding IndexHeader's global_offset
     uint64_t codebook_hash;
     uint8_t* data;
 } PQCodes;
@@ -215,6 +216,7 @@ static inline int pq_codes_load(const char* path, PQCodes* pq_codes)
     // Reading encodings metadata
     if (fread(&pq_codes->n_points, sizeof(uint32_t), 1, encodings_file) != 1 ||
         fread(&pq_codes->M, sizeof(uint32_t), 1, encodings_file) != 1 ||
+        fread(&pq_codes->global_offset, sizeof(uint32_t), 1, encodings_file) != 1 ||
         fread(&pq_codes->codebook_hash, sizeof(uint64_t), 1, encodings_file) != 1) 
     {
         fprintf(stderr, "pq_codes_load: header corrupted or not match expected format in %s\n", path);
