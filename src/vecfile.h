@@ -30,6 +30,7 @@
         }                                                               \
     } while(0);
 
+#define VECFILE_HEADER_BYTES (2*sizeof(uint32_t))
 
 // Vecfile data definition
 typedef struct {
@@ -102,13 +103,40 @@ static inline void vecfile_free(VecFile* vf)
     vf->dim = 0;
 }
 
-static int read_vecfile_header(int fd, uint32_t* out_n_vectors, uint32_t* out_dim)
+static inline int read_vecfile_header(int fd, uint32_t* out_n_vectors, uint32_t* out_dim)
 {
     uint32_t hdr_fields[2];
     ssize_t r = pread(fd, hdr_fields, sizeof(hdr_fields), 0);
     if ((size_t)r != sizeof(hdr_fields)) { return -1; }
     *out_n_vectors = hdr_fields[0];
     *out_dim = hdr_fields[1];
+    return 0;
+}
+
+// Loading the vecfile data shard
+static inline int vecfile_load_slice(int fd, uint32_t dim, uint32_t start_vector, uint32_t count, VecFile* out)
+{
+    // Populate metadata sections
+    out->dim = dim;
+    out->num_vectors = count;
+
+    // Populating data slice
+    size_t n_bytes = count * dim * sizeof(float);
+    out->data = (float*) malloc(n_bytes);
+    if (out->data == NULL && n_bytes > 0) {return -1;}
+
+    size_t offset = VECFILE_HEADER_BYTES + start_vector*dim*sizeof(float);
+    size_t total_read = 0;
+    while(total_read < n_bytes) {
+        ssize_t r = pread(fd, (uint8_t*) (out->data+total_read), (n_bytes - total_read), (offset + total_read));
+        total_read += (size_t)r;
+        if (r <= 0) {
+            free(out->data);
+            out->data = NULL;
+            return -1;
+        }
+    }
+
     return 0;
 }
 

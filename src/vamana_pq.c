@@ -15,8 +15,6 @@
 #include "vecfile.h"
 #include "vamana.h"
 
-#define VECFILE_HEADER_BYTES (2*sizeof(uint32_t))
-
 DEFINE_OPTION(uint32_t);
 
 // Medoid finder (technically not a true one but more like centroid-closest vector heuristic approximation)
@@ -440,9 +438,10 @@ int main(int argc, char** argv)
         fprintf(stderr, "Rank %d: Failed to read the dataset at %s", data_fd, data_path);
         MPI_Abort(MPI_COMM_WORLD, 1);
     }
-    uint32_t n_vectors; 
+    // Getting total dataset statistics from header
+    uint32_t total_n_vectors; 
     uint32_t dim;
-    if (read_vecfile_header(data_fd, &n_vectors, &dim) < 0) {
+    if (read_vecfile_header(data_fd, &total_n_vectors, &dim) < 0) {
         fprintf(stderr, "Rank %d: failed to read vecfile header from %s\n", rank, data_path);
         close(data_fd);
         pq_codebook_free(&pq);
@@ -462,7 +461,34 @@ int main(int argc, char** argv)
         .dist_fn = metric(),
     };
 
+    // Split `total_num_vectors` into `num_shards` contiguous chunks
+    uint32_t vec_base = total_n_vectors / n_shards;
+    uint32_t vec_remainder = total_n_vectors % n_shards;
+
+    // Find shard's and rank work count and starting point
+    uint32_t shard_base = n_shards / (uint32_t) world_size;
+    uint32_t shard_remainder = n_shards % (uint32_t) world_size;
+    uint32_t rank_count = shard_base + (((uint32_t) rank < shard_remainder) ? 1 : 0);
+    uint32_t rank_start = (uint32_t) rank * shard_base + (((uint32_t) rank < shard_remainder) ? (uint32_t) rank : shard_remainder);
+    
+    // Process indexing and encodings
+    for (uint32_t r = 0; r < rank_count; r++) {
+        
+        uint32_t s = rank_start + r;
+        
+        char base_filename[128];
+
+        uint32_t count = vec_base + ((s < vec_remainder) ? 1 : 0);
+        uint32_t start_vector = s*vec_base + ((s < vec_remainder) ? s : vec_remainder);
+
+        VecFile vf;
+
+
+        vecfile_free(&vf);
+    }
+
     /* Cleanups */
+    pq_codebook_free(&pq);
     close(data_fd);
     MPI_Finalize();
     return 0;
