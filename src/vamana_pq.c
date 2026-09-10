@@ -477,12 +477,19 @@ int main(int argc, char** argv)
         uint32_t s = rank_start + r;
         
         char base_filename[128];
+        snprintf(base_filename, sizeof(base_filename), "shard_%u", s);
 
         uint32_t count = vec_base + ((s < vec_remainder) ? 1 : 0);
         uint32_t start_vector = s*vec_base + ((s < vec_remainder) ? s : vec_remainder);
 
         VecFile vf;
+        if (vecfile_load_slice(data_fd, dim, start_vector, count, &vf) < 0) {
+            fprintf(stderr, "Rank %d: Failed to read vectors from %s", rank, data_path);
+        }
 
+        // Build Vamana index and encode the shard
+        build_shard_vamana_index(&vf, &cfg, base_filename, rank);
+        encode_shard(&vf, &cfg, base_filename, rank);
 
         vecfile_free(&vf);
     }
