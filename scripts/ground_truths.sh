@@ -9,4 +9,4 @@ mkdir -p data/result data/gt
 
 
 # Query and generate ground truths from dataset with respect to the queries
-python3 queries/query.py data/vectors.vecf data/queries.vecf data/gt/ground_truths.csv --k 100 --std-dev 0.5
+python3 scripts/query.py data/vectors.vecf data/queries.vecf data/gt/ground_truths.csv --k 100 --std-dev 0.5
