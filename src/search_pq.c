@@ -1,6 +1,5 @@
 #include <dirent.h>
 #include <float.h>
-#include <math.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -86,6 +85,12 @@ static void uring_read_vamana_index(struct io_uring* uring,
 
 }
 
+// Full-precision candidates reranking struct
+typedef struct {
+    uint32_t id;
+    float dist;
+} RerankedCandidates;
+
 // Query beam search to be run for each thread
 static void beam_search_pq(int vamana_fd, 
                         const IndexHeader* hdr, 
@@ -120,7 +125,7 @@ static void beam_search_pq(int vamana_fd,
     uint32_t* batch_vamana_ids = (uint32_t*) malloc(beam_width*sizeof(uint32_t));
     uint32_t* unvisited_ids = (uint32_t*) malloc(beam_width*sizeof(uint32_t));
 
-    // Preparing reading from Vamana index in batch of `beam_width` (maximum)
+    // Vamana index graph traversal in batch of `beam_width` (maximum) with with PQ ADC distances
     uint32_t batch_count = 0;
     while((batch_count = next_unvisted_candidates_batch(&cand_list, unvisited_ids, beam_width)) > 0) {
         for (uint32_t k = 0; k < batch_count; k++) {
@@ -144,15 +149,62 @@ static void beam_search_pq(int vamana_fd,
         }
     }
 
-    // Copy the top-K results out, padding any remainder with sentinels
-    uint32_t top = (cand_list.size < K) ? cand_list.size : K;
-    for (uint32_t k = 0; k < top; k++) {
-        out_ids[k]   = cand_list.items[k].id;
-        out_dists[k] = sqrtf(cand_list.items[k].dist);
-    }
-    for (uint32_t k = top; k < K; k++) {
-        out_ids[k]   = UINT32_MAX;
-        out_dists[k] = FLT_MAX;
+    // Full-precision re-ranking
+    uint32_t n_reranks = (cand_list.size < RERANK_POOL) ? cand_list.size : RERANK_POOL;
+    if (n_reranks > 0) {
+        uint32_t* rerank_ids = (uint32_t*) malloc(n_reranks * sizeof(uint32_t));
+        uint8_t* rerank_buffer = (uint8_t*) malloc(n_reranks * record_size * sizeof(uint8_t));
+
+        for (uint32_t k = 0; k < n_reranks; k++) {
+            rerank_ids[k] = cand_list.items[k].id;
+        }
+
+        // Read in the full-precision candidates again
+        for (uint32_t offset = 0; offset < n_reranks; offset += beam_width) {
+            uint32_t chunk = (n_reranks - offset < beam_width) ? (n_reranks - offset) : beam_width;
+            uring_read_vamana_index(uring, vamana_fd, hdr, &rerank_ids[offset], chunk, record_size, rerank_buffer + (size_t)offset*record_size, record_size);
+        }
+
+        RerankedCandidates* rerank_list = malloc(n_reranks*sizeof(RerankedCandidates));
+        for (uint32_t k = 0; k < n_reranks; k++) {
+            IndexRecord record;
+            index_record_decode(hdr, rerank_buffer + (size_t)k * record_size, &record);
+            rerank_list[k].id = rerank_ids[k];
+            rerank_list[k].dist = dist_fn(query, record.vector, hdr->dim);
+        }
+
+        // Insertion sort candidates by ascending exact distance
+        for (uint32_t i = 1; i < n_reranks; i++) {
+            RerankedCandidates key = rerank_list[i];
+            int j = (int)i - 1;
+            while (j >= 0 && rerank_list[j].dist > key.dist) {
+                rerank_list[j + 1] = rerank_list[j];
+                j--;
+            }
+            rerank_list[j + 1] = key;
+        }
+
+        // Copy top-K results to the output, padding any remainder with sentinels.
+        uint32_t top = (n_reranks < K) ? n_reranks : K;
+        for (uint32_t k = 0; k < top; k++) {
+            out_ids[k]   = rerank_list[k].id;
+            out_dists[k] = rerank_list[k].dist;
+        }
+        for (uint32_t k = top; k < K; k++) {
+            out_ids[k]   = UINT32_MAX;
+            out_dists[k] = FLT_MAX;
+        }
+
+        // Rerank cleanups
+        free(rerank_list);
+        free(rerank_ids);
+        free(rerank_buffer);
+    } 
+    else {  // Just pads the output with sentinels if nothing gets reranked (no candidates)
+        for (uint32_t k = 0; k < K; k++) {
+            out_ids[k]   = UINT32_MAX;
+            out_dists[k] = FLT_MAX;
+        }
     }
 
     // Cleanups
@@ -261,6 +313,7 @@ static void top_k_reduction(
             scratch_space[j + 1] = scratch_space[j]; 
             j--;
         }
+        scratch_space[j + 1] = key;
     }
 
     // Record top-K
@@ -463,6 +516,15 @@ int main(int argc, char** argv)
             return 9;
         }
 
+        // Check global_offset agreement
+        if (encodings.global_offset != hdr.global_offset) {
+            fprintf(stderr, "Rank %d: PQ encoding global_offset %u does not match Vamana graph global_offset %u! "
+                            "Base file name of %s\n"
+                            ,rank, encodings.global_offset, hdr.global_offset, base_filename);
+            MPI_Abort(MPI_COMM_WORLD, 11);
+            return 11;
+        }
+
         // Clearing out previous shard's data
         memset(shard_ids, 0, n_queries * K * sizeof(uint32_t));
         memset(shard_dists, 0, n_queries * K * sizeof(float));
@@ -473,6 +535,13 @@ int main(int argc, char** argv)
             beam_search_pq(vamana_fd, &hdr, &codebook, &encodings, dist_fn, 
                             &queries[(size_t)q*dim], L, K, beam_width,
                             &shard_ids[(size_t)q*K], &shard_dists[(size_t)q*K]);
+        }
+
+        // Translate this shard's local ids into global dataset ids
+        for (size_t i = 0; i < (size_t)n_queries * K; i++) {
+            if (shard_ids[i] != UINT32_MAX) {
+                shard_ids[i] += hdr.global_offset;
+            }
         }
 
         // Reduce to a top K results

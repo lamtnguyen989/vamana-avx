@@ -193,7 +193,7 @@ typedef struct {
 } ShardJobConfig;
 
 // Vamana index building pipeline
-static void build_shard_vamana_index(VecFile* vf, const ShardJobConfig* cfg, const char* base_filename, int rank)
+static void build_shard_vamana_index(VecFile* vf, const ShardJobConfig* cfg, const char* base_filename, int rank, uint32_t global_offset)
 {
     /* Getting data from config */
     dist_fn_t dist_fn = cfg->dist_fn;
@@ -297,6 +297,7 @@ static void build_shard_vamana_index(VecFile* vf, const ShardJobConfig* cfg, con
         .dim = vf->dim,
         .R = R,
         .medoid_id = medoid,
+        .global_offset = global_offset,
     };
     fwrite(&hdr, sizeof(IndexHeader), 1, vamana_out);
 
@@ -325,7 +326,7 @@ static void build_shard_vamana_index(VecFile* vf, const ShardJobConfig* cfg, con
 
 
 // Shard encoding pipeline
-static void encode_shard(VecFile* vf, const ShardJobConfig* cfg, const char* base_filename, int rank)
+static void encode_shard(VecFile* vf, const ShardJobConfig* cfg, const char* base_filename, int rank, uint32_t global_offset)
 {
     PQCodebook* pq = cfg->pq_codebook;
 
@@ -359,6 +360,7 @@ static void encode_shard(VecFile* vf, const ShardJobConfig* cfg, const char* bas
     fwrite(&magic, sizeof(uint32_t), 1, encodings_file);
     fwrite(&vf->num_vectors, sizeof(uint32_t), 1, encodings_file);
     fwrite(&pq->M, sizeof(uint32_t), 1, encodings_file);
+    fwrite(&global_offset, sizeof(uint32_t), 1, encodings_file);
     fwrite(&pq->hash, sizeof(uint64_t), 1, encodings_file); /* Tie the codes file to this exact codebook */
     fwrite(encodings, 1, vf->num_vectors * pq->M * sizeof(uint8_t), encodings_file);
 
@@ -491,8 +493,8 @@ int main(int argc, char** argv)
         }
 
         // Build Vamana index and encode the shard
-        build_shard_vamana_index(&vf, &cfg, base_filename, rank);
-        encode_shard(&vf, &cfg, base_filename, rank);
+        build_shard_vamana_index(&vf, &cfg, base_filename, rank, start_vector);
+        encode_shard(&vf, &cfg, base_filename, rank, start_vector);
 
         vecfile_free(&vf);
     }

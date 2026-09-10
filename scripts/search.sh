@@ -1,3 +1,4 @@
 #!/usr/bin/env bash
 
-mpiexec -n 4 build/search data/queries.vecf 20 data/shards/index data/shards/pq_codebook.pqbook data/shards/encodings data/result/results.csv
+make search
+mpiexec -n 4 build/search data/queries.vecf 100 data/shards/index data/shards/pq_codebook.pqbook data/shards/encodings data/result/results.csv 256 64 4
