@@ -1,4 +1,4 @@
-# vamana-avx
+# Vamana-AVX
 From-scratch implementation of the Vamana vector search algorithm (more specifically [DiskANN](https://milvus.io/blog/diskann-explained.md)) for learning [AVX-intrinsics](https://www.intel.com/content/www/us/en/docs/intrinsics-guide/index.html) programming (and a bit of under the hood ML algorithms) alongside some other cool high-performance software technologies!
 
 
@@ -8,13 +8,12 @@ From-scratch implementation of the Vamana vector search algorithm (more specific
     - [x] Make our own data generator and serialize it to `.vecf`
     - [x] Make a `.vecf` data sharding for encoding purposes.
 - [x] Create queries and associated ground truths on the generated datasets for benchmarking.
-    - [ ] (Optional) Rewrite the queries and ground truth in Rust to improve memory usage (and performance)
 - [x] Creating our own custom [product quantization](https://towardsdatascience.com/similarity-search-product-quantization-b2a1a6397701/) (of FP32s) scheme and codebooks (serialized format extensions of `.pqbook` for codebooks and `.pqbin` for encodings)
 - [x] Make our own PQ codebook training algorithm.
 - [x] Encode data shards using trained codebooks.
 - [x] Create indexing formats to be used for searching.
 - [x] Building index for Vamana graph search.
 - [x] Writing a (distributed) Vamana graph search algorithm on our custom data (MPI, OpenMP alongside `io_uring` for beam width batch and reranking).
-- [ ] Benchmark the pipeline's _recall@k_ scores.
+- [x] Benchmark the pipeline's _recall@k_ scores.
 - [ ] (Optional) Observe the searching program with eBPF through Rust Aya.
 - [ ] (Optional) Currently work with only L2 metric implementation, it would be great to expand to other metrics (cosine, L1, etc.)
