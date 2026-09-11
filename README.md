@@ -1,7 +1,7 @@
 # Vamana-AVX
 From-scratch end-to-end implementation of the Vamana vector search algorithm (more specifically [DiskANN](https://milvus.io/blog/diskann-explained.md)) grew out from the original goal of learning [AVX-intrinsics](https://www.intel.com/content/www/us/en/docs/intrinsics-guide/index.html) programming (and a bit of under the hood ML algorithms from their first principles) on CPUs.
 
-The pipeline was design to squeeze as much capabilities of CPU as possible. The main DiskANN-related core (product quantizations, building graph indexes and searching) was executed in a parallelized manner in multi-threaded MPI environments using OpenMP threadpools.
+The pipeline was design to squeeze as much capabilities of CPU as possible. The main DiskANN-related core (product quantizations, building graph indexes and searching) was executed in a parallelized manner with multi-threaded MPI environments using OpenMP threadpools.
 
 
 ## Checklist
@@ -24,7 +24,7 @@ The pipeline was design to squeeze as much capabilities of CPU as possible. The 
 ![image info](./results/recall_10.png)
 ![image info](./results/recall_20.png)
 
-Overall, doing this really showcase the Curse of Dimensionality effect. Although one unexpected thing coming out from this is that too low of a dimension count can also negatively affect the product-quantization performance. In hindsight, full-precision search is totally feasible and is a better choice for these low-dimensional cases. See `results/` for more on the precision performance of the pipeline.
+Overall, doing this really showcase the Curse of Dimensionality effect, performance drop sharply above 128-dimension (which sort of explain why most white-paper dataset work with 128-dimension as well). Although one unexpected thing coming out from this is that too low of a dimension count can also negatively affect the product-quantization performance as we can see with the 16-dimensions results. In hindsight, full-precision search is totally feasible and is a better choice for these low-dimensional cases. See `results/` for more on the precision performance of the pipeline.
 
 ## Requirements
 - C
