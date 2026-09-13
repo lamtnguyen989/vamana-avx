@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 
 DIM=${1:-128}
+SPACK_ENV=${2:-"vamana-avx"}
+
+# Setting up Spack environments
+source "$SPACK_ROOT"/share/spack/setup-env.sh
+spack env activate "$SPACK_ENV"
 
 # Create high dimensional dataset and serialize to `.vecf` format (along with the shardings)
 ./scripts/generate.sh $DIM
