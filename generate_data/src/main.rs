@@ -43,6 +43,7 @@ struct Args
     batch_size: usize, 
 }
 
+/// Resolving user input file paths
 fn resolve_output_path(user_path: &Path) -> std::io::Result<PathBuf> {
     // Obey the absolute path outputs
     if user_path.is_absolute() {
@@ -67,7 +68,7 @@ fn resolve_output_path(user_path: &Path) -> std::io::Result<PathBuf> {
 }
 
 /// Generating clusters centers 
-///  Deliberately double precision and shouldn't matter due to we only use this as reference for blobs locations
+/// Deliberately double precision and shouldn't matter due to we only use this as reference for blobs locations
 /// Furthermore, the generations is purely sequential and independent from blob vectors generations that follows
 fn generate_centers(seed: u64, n_clusters: usize, dim: usize) -> Vec<Vec<f64>>
 {
@@ -152,14 +153,10 @@ fn main() -> std::io::Result<()> {
         eprintln!("Thread count can not be less than 1! Default thread count to 1.");
         args.threads = 1;
     }
-    let rayon_setup = rayon::ThreadPoolBuilder::new()
+    rayon::ThreadPoolBuilder::new()
                         .num_threads(args.threads)
-                        .build_global();
-    match rayon_setup {
-        Ok(_) => println!("Global threadpool initialized successfully."),
-        Err(e) => panic!("Failed to initialize global threadpool. Error: {}", e)
-    }
-
+                        .build_global()
+                        .unwrap_or_else(|e| panic!("Failed to initialize global threadpool. Error: {}", e));
     // Generate data and serialize to file
     generate_vecfile(&args)?;
 
