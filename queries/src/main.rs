@@ -9,7 +9,7 @@ use rand_distr::{Distribution, Normal};
 use rand_xoshiro::Xoshiro256PlusPlus;
 use rayon::prelude::*;
 
-use crate::{query::QueryItem, vecf::{Vecf, WRITE_BUFFER_SIZE}};
+use crate::{query::QueryItem, vecf::{Vecf, WRITE_BUFFER_SIZE, write_vecf}};
 
 
 #[derive(Copy, Clone, Debug, ValueEnum)]
@@ -27,8 +27,8 @@ struct Args
     /// Queries output path [Internally default relative paths to <PROJECT_ROOT>/<queries_out_path>]
     queries_out_path: PathBuf,
 
-    /// Output path for the ground truth CSV [Internally default relative paths to <PROJECT_ROOT>/<ground_truth_csv>]
-    ground_truth_csv: PathBuf,
+    /// Output path for the ground truth CSV [Internally default relative paths to <PROJECT_ROOT>/<ground_truths_csv>]
+    ground_truths_csv: PathBuf,
 
     /// Number of queries to generate
     #[arg(short = 'n', long = "n-queries", default_value_t = 1000)]
@@ -36,10 +36,10 @@ struct Args
 
     /// Number of nearest neighbors to compute per query
     #[arg(short = 'k', long, default_value_t = 100)]
-    neighbors: usize,
+    neighbors_count: usize,
 
     /// Standard deviation of the Gaussian noise added to sampled base points
-    #[arg(long = "std-dev", default_value_t = 0.5)]
+    #[arg(short = 's', long = "std-dev", default_value_t = 0.5)]
     std_dev: f64,
 
     /// Number of threads to be used in generation concurrently
@@ -168,7 +168,7 @@ fn knn_l2(
 
     for i in 0..n_vectors {
         // Computing L2 distance from query vector to the data vector
-        let data_vector = &data[k*dim..(i+1)*dim];
+        let data_vector = &data[i*dim..(i+1)*dim];
         let mut diff_sq = 0.0_f32;
         for j in 0..dim {
             diff_sq += (data_vector[j] - query[j]) * (data_vector[j] - query[j]);
@@ -225,7 +225,7 @@ fn ground_truths_l2(
     return (gt_indices, gt_distances);
 }
 
-fn write_ground_truths(
+fn write_ground_truths_csv(
     path: &Path, 
     gt_indices: &[u32], 
     gt_dists: &[f32], 
@@ -257,7 +257,7 @@ fn main() -> std::io::Result<()>
     // Resolving paths
     args.data_path = resolve_input_path(&args.data_path)?;
     args.queries_out_path = resolve_output_path(&args.queries_out_path)?;
-    args.ground_truth_csv = resolve_output_path(&args.ground_truth_csv)?;
+    args.ground_truths_csv = resolve_output_path(&args.ground_truths_csv)?;
 
 
     // Setting up Rayon threadpool
@@ -276,7 +276,22 @@ fn main() -> std::io::Result<()>
     let data = vecf.data();
     println!("Loaded dataset has {n_vectors} points in {dim} dimensions.");
 
-    // 
+    // Generate queries
+    let queries = generate_queries(data, n_vectors, dim, args.n_queries, args.std_dev, args.seed);
+    write_vecf(&args.queries_out_path, &queries, args.n_queries as u32, vecf.dim)?;
+    println!("Write {} queries (Gaussian std={}) to {:?}", args.n_queries, args.std_dev, args.queries_out_path);
+
+    // Compute ground truths
+    println!("Computing top-{} ground truths using {:?} metric...", args.neighbors_count, args.metric);
+    let (gt_indices, gt_dists) = match args.metric {
+        Metric::L2 => {ground_truths_l2(data, n_vectors, dim, &queries, args.n_queries, args.neighbors_count, args.batch_size)}
+        Metric::Cosine => {todo!("Cosine metric has not been implemented yet!")}
+    };
+
+    // Serialize ground truths to CSV
+    println!("Saving ground truth CSV to {:?}...", args.ground_truths_csv);
+    write_ground_truths_csv(&args.ground_truths_csv, &gt_indices, &gt_dists, args.n_queries, args.neighbors_count)?;
+    println!("Done!");
 
     Ok(())
 }

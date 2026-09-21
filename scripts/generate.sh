@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 
+# Creating data paths
 mkdir -p data/
 mkdir -p data/shards/
+mkdir -p data/result 
+mkdir -p data/gt
 
 DIM=${1:-128}
 
@@ -11,3 +14,4 @@ cargo run -r -p generate_data -- data/vectors.vecf -n 2000000 -d "$DIM" -c 200 -
                                 --seed 69
                                 
 python3 scripts/sample.py data/vectors.vecf data/sample.vecf --sample-size 500000
+
