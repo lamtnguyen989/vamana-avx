@@ -4,6 +4,9 @@ mod vecf;
 use std::{collections::BinaryHeap, io::{BufWriter, Write}, path::{Path, PathBuf}};
 
 use clap::{Parser, ValueEnum};
+use rand::{RngExt, SeedableRng};
+use rand_distr::{Distribution, Normal};
+use rand_xoshiro::Xoshiro256PlusPlus;
 use rayon::prelude::*;
 
 use crate::{query::QueryItem, vecf::{Vecf, WRITE_BUFFER_SIZE}};
@@ -107,6 +110,33 @@ fn sort_query(heap: BinaryHeap<QueryItem>) -> (Vec<u32>, Vec<f32>) {
     let distances = neighbors.iter().map(|neighbor| neighbor.dist).collect();
 
     return (indices, distances);
+}
+
+/// Generating queries from the data set
+fn generate_queries(
+    data: &[f32],
+    n_vectors: usize,
+    dim: usize,
+    n_queries: usize,
+    std_dev: f64,
+    base_seed: u64,
+) -> Vec<f32> {
+    // Logic between each queries generation are independent from one another
+    // So parallelized between queries but generating logic stays sequential
+    return (0..n_queries).into_par_iter()
+                        .flat_map_iter(|q_id| {
+                            // Initialize randomness and noise
+                            let mut rng = Xoshiro256PlusPlus::seed_from_u64(base_seed.wrapping_add(q_id as u64));
+                            let base_idx = rng.random_range(0..n_vectors);
+                            let noise = Normal::new(0.0_f64, std_dev).expect("Invalid Normal sampling configuration.");
+
+                            // Adding noise to data sampling and call it a query vector
+                            let base_vector = &data[base_idx*dim..(base_idx+1)*dim];
+                            return (0..dim).map(move |d| {
+                                (base_vector[d] as f64 + noise.sample(&mut rng)) as f32
+                            });
+                        })
+                        .collect();
 }
 
 /// Sorting query into slices
