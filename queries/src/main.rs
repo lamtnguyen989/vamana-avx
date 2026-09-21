@@ -1,4 +1,4 @@
-mod query;
+mod query_item;
 mod vecf;
 
 use std::{collections::BinaryHeap, io::{BufWriter, Write}, path::{Path, PathBuf}};
@@ -9,7 +9,7 @@ use rand_distr::{Distribution, Normal};
 use rand_xoshiro::Xoshiro256PlusPlus;
 use rayon::prelude::*;
 
-use crate::{query::{QueryItem, SortQueryItemsExt}, vecf::{Vecf, WRITE_BUFFER_SIZE, write_vecf}};
+use crate::{query_item::{QueryItem, SortQueryItemsExt}, vecf::{Vecf, WRITE_BUFFER_SIZE, write_vecf}};
 
 
 #[derive(Copy, Clone, Debug, ValueEnum)]
