@@ -9,7 +9,7 @@ use rand_distr::{Distribution, Normal};
 use rand_xoshiro::Xoshiro256PlusPlus;
 use rayon::prelude::*;
 
-use crate::{query::QueryItem, vecf::{Vecf, WRITE_BUFFER_SIZE, write_vecf}};
+use crate::{query::{QueryItem, SortQueryItemsExt}, vecf::{Vecf, WRITE_BUFFER_SIZE, write_vecf}};
 
 
 #[derive(Copy, Clone, Debug, ValueEnum)]
@@ -57,7 +57,6 @@ struct Args
     /// Distance metric used for ground truth computation
     #[arg(long, value_enum, default_value_t = Metric::L2)]
     metric: Metric,
-
 }
 
 /// Resolving user output file paths
@@ -100,18 +99,6 @@ fn resolve_input_path(user_path: &Path) -> std::io::Result<PathBuf> {
     Ok(project_root.join(user_path))
 }
 
-/// Sorting Query Heap in to pairs of Vecs
-#[allow(dead_code)]
-fn sort_query(heap: BinaryHeap<QueryItem>) -> (Vec<u32>, Vec<f32>) {
-    let mut neighbors = heap.into_vec();
-    neighbors.sort();
-
-    let indices = neighbors.iter().map(|neighbor| neighbor.id).collect();
-    let distances = neighbors.iter().map(|neighbor| neighbor.dist).collect();
-
-    return (indices, distances);
-}
-
 /// Generating queries from the data set
 fn generate_queries(
     data: &[f32],
@@ -138,21 +125,6 @@ fn generate_queries(
                         })
                         .collect();
 }
-
-/// Sorting query into slices
-fn sort_query_into(heap: BinaryHeap<QueryItem>, idx_out: &mut [u32], dists_out: &mut [f32])
-{
-    // Sorting neighbors
-    let mut neighbors = heap.into_vec();
-    neighbors.sort();
-
-    // Iterate through neighbor and write directly into buffering slice
-    for (item, (id_out, d_out)) in neighbors.iter()
-                                    .zip(idx_out.iter_mut().zip(dists_out.iter_mut())) {
-        *id_out = item.id;
-        *d_out = item.dist;                                
-    }
-} 
 
 /// Computing L2 nearest neighbors with respect to a single query
 fn knn_l2(
@@ -186,7 +158,7 @@ fn knn_l2(
             }
         }
     }
-    sort_query_into(heap, idx_out, dists_out);
+    heap.sort_query_into(idx_out, dists_out);
 }
 
 /// Computing ground truths with respect to L2-metric
