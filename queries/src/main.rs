@@ -151,10 +151,12 @@ fn knn_l2(
         if heap.len() < k {
             heap.push(QueryItem { dist: dist, id: i as u32 });
         }
-        else if let Some(worst) = heap.peek() {
-            if dist < worst.dist {
-                heap.pop();
-                heap.push(QueryItem { dist: dist, id: i as u32 });
+        else {
+            if let Some(worst) = heap.peek() {
+                if dist < worst.dist {
+                    heap.pop();
+                    heap.push(QueryItem { dist: dist, id: i as u32 });
+                }
             }
         }
     }
@@ -170,8 +172,8 @@ fn ground_truths_l2(
     n_queries: usize,
     k: usize,
     batch_size: usize,
-) -> (Vec<u32>, Vec<f32>)
-{
+) -> (Vec<u32>, Vec<f32>) {
+    // Initialize ground truths beffer
     let mut gt_indices = vec![0_u32; n_queries * k];
     let mut gt_distances = vec![0.0_f32; n_queries * k];
 
