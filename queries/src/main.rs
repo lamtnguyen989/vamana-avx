@@ -3,6 +3,7 @@ mod query;
 use std::{collections::BinaryHeap, io::{BufWriter, Write}, path::{Path, PathBuf}};
 
 use clap::{Parser, ValueEnum};
+use memmap2::Mmap;
 use rayon::prelude::*;
 
 use crate::query::QueryItem;
@@ -140,9 +141,38 @@ fn knn_l2(query: &[f32], data: &[f32], n_vectors: usize, dim: usize, k: usize) -
 }
 
 /// Computing ground truths with respect to L2-metric
-fn ground_truths_l2()
+fn ground_truths_l2(
+    data: &[f32],
+    n_vectors: usize,
+    dim: usize,
+    queries: &[f32],
+    n_queries: usize,
+    k: usize,
+    batch_size: usize,
+) -> (Vec<u32>, Vec<f32>)
 {
-    todo!();
+    let mut gt_indices = vec![0_u32; n_queries * k];
+    let mut gt_distances = vec![0.0_f32; n_queries * k];
+
+    let mut start = 0_usize;
+    while start < n_queries {
+        // Setting batch work boundary
+        let end = (start + batch_size).min(n_queries);
+
+        // Computing ground truths from queries concurrently
+        let gt: Vec<(Vec<u32>, Vec<f32>)> = (start..end).into_par_iter()
+                                                .map(|q| { 
+                                                    let query = &queries[q*dim..(q+1)*dim];
+                                                    return knn_l2(query, data, n_vectors, dim, k);
+                                                })
+                                                .collect();
+        // Copy computed ground truths result global
+
+        // Advance to the next batch                
+        start = end;
+    }
+
+    return (gt_indices, gt_distances);
 }
 
 fn write_ground_truths(
