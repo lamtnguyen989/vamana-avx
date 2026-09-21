@@ -1,14 +1,13 @@
 mod query;
+mod vecf;
 
 use std::{collections::BinaryHeap, io::{BufWriter, Write}, path::{Path, PathBuf}};
 
 use clap::{Parser, ValueEnum};
-use memmap2::Mmap;
 use rayon::prelude::*;
 
 use crate::query::QueryItem;
 
-const HEADER_BYTES: usize = 8;
 const WRITE_BUFFER_SIZE: usize = 16 * 1024 * 1024;
 
 
@@ -121,7 +120,7 @@ fn knn_l2(query: &[f32], data: &[f32], n_vectors: usize, dim: usize, k: usize) -
         let data_vector = &data[k*dim..(i+1)*dim];
         let mut diff_sq = 0.0_f32;
         for j in 0..dim {
-            diff_sq = (data_vector[j] - query[j]) * (data_vector[j] - query[j]);
+            diff_sq += (data_vector[j] - query[j]) * (data_vector[j] - query[j]);
         }
         let dist = diff_sq.sqrt();
 
@@ -203,6 +202,12 @@ fn main() -> std::io::Result<()>
 {
     // Parsing CLI
     let mut args = Args::parse();
+
+    // Resolving paths
+    args.data_path = resolve_input_path(&args.data_path)?;
+    args.queries_out_path = resolve_output_path(&args.queries_out_path)?;
+    args.ground_truth_csv = resolve_output_path(&args.ground_truth_csv)?;
+
 
     // Setting up Rayon threadpool
     if args.threads < 1 {
