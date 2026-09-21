@@ -1,8 +1,9 @@
-use std::path::Path;
+use std::{io::{BufWriter, Write}, path::Path};
 
 use memmap2::Mmap;
 
-pub const HEADER_BYTES: usize = 8;
+const HEADER_BYTES: usize = 8;
+pub const WRITE_BUFFER_SIZE: usize = 16 * 1024 * 1024;
 
 /// Mmap'd .vecf file representation
 pub struct Vecf {
@@ -55,3 +56,23 @@ impl Vecf
     }
 
 }
+
+/// Writing .vecf serialization
+pub fn write_vecf(path: &Path, vectors_data: &[f32], n_vectors: u32, dim: u32) -> std::io::Result<()> 
+{
+    let file = std::fs::File::create(path)?;
+    let mut writer = BufWriter::with_capacity(WRITE_BUFFER_SIZE, file);
+ 
+    writer.write_all(&n_vectors.to_le_bytes())?;
+    writer.write_all(&dim.to_le_bytes())?;
+ 
+    let mut byte_buf = Vec::with_capacity(vectors_data.len() * 4);
+    for &float in vectors_data {
+        byte_buf.extend_from_slice(&float.to_le_bytes());
+    }
+    writer.write_all(&byte_buf)?;
+ 
+    writer.flush()?;
+    Ok(())
+}
+

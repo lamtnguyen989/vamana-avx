@@ -6,9 +6,7 @@ use std::{collections::BinaryHeap, io::{BufWriter, Write}, path::{Path, PathBuf}
 use clap::{Parser, ValueEnum};
 use rayon::prelude::*;
 
-use crate::query::QueryItem;
-
-const WRITE_BUFFER_SIZE: usize = 16 * 1024 * 1024;
+use crate::{query::QueryItem, vecf::{Vecf, WRITE_BUFFER_SIZE}};
 
 
 #[derive(Copy, Clone, Debug, ValueEnum)]
@@ -100,6 +98,7 @@ fn resolve_input_path(user_path: &Path) -> std::io::Result<PathBuf> {
 }
 
 /// Sorting Query Heap in to pairs of Vecs
+#[allow(dead_code)]
 fn sort_query(heap: BinaryHeap<QueryItem>) -> (Vec<u32>, Vec<f32>) {
     let mut neighbors = heap.into_vec();
     neighbors.sort();
@@ -110,9 +109,31 @@ fn sort_query(heap: BinaryHeap<QueryItem>) -> (Vec<u32>, Vec<f32>) {
     return (indices, distances);
 }
 
-/// Computing L2 nearest neighbors with respect to a single query
-fn knn_l2(query: &[f32], data: &[f32], n_vectors: usize, dim: usize, k: usize) -> (Vec<u32>, Vec<f32>)
+/// Sorting query into slices
+fn sort_query_into(heap: BinaryHeap<QueryItem>, idx_out: &mut [u32], dists_out: &mut [f32])
 {
+    // Sorting neighbors
+    let mut neighbors = heap.into_vec();
+    neighbors.sort();
+
+    // Iterate through neighbor and write directly into buffering slice
+    for (item, (id_out, d_out)) in neighbors.iter()
+                                    .zip(idx_out.iter_mut().zip(dists_out.iter_mut())) {
+        *id_out = item.id;
+        *d_out = item.dist;                                
+    }
+} 
+
+/// Computing L2 nearest neighbors with respect to a single query
+fn knn_l2(
+    query: &[f32], 
+    data: &[f32], 
+    n_vectors: usize, 
+    dim: usize, 
+    k: usize,
+    idx_out: &mut [u32],
+    dists_out: &mut [f32],
+){
     let mut heap: BinaryHeap<QueryItem> = BinaryHeap::with_capacity(k+1);
 
     for i in 0..n_vectors {
@@ -135,8 +156,7 @@ fn knn_l2(query: &[f32], data: &[f32], n_vectors: usize, dim: usize, k: usize) -
             }
         }
     }
-
-    return sort_query(heap);
+    sort_query_into(heap, idx_out, dists_out);
 }
 
 /// Computing ground truths with respect to L2-metric
@@ -158,16 +178,17 @@ fn ground_truths_l2(
         // Setting batch work boundary
         let end = (start + batch_size).min(n_queries);
 
-        // Computing ground truths from queries concurrently
-        let gt: Vec<(Vec<u32>, Vec<f32>)> = (start..end).into_par_iter()
-                                                .map(|q| { 
-                                                    let query = &queries[q*dim..(q+1)*dim];
-                                                    return knn_l2(query, data, n_vectors, dim, k);
-                                                })
-                                                .collect();
-        // Copy computed ground truths result global
+        // Computing ground truths from queries concurrently from the batch
+        gt_indices[start*k..end*k].par_chunks_mut(k)
+                                    .zip(gt_distances[start*k..end*k].par_chunks_mut(k))
+                                    .zip((start..end).into_par_iter())
+                                    .for_each(|((id_chunk, d_chunk), q)| {
+                                        let query = &queries[q*dim..(q+1)*dim];
+                                        knn_l2(query, data, n_vectors, dim, k, id_chunk, d_chunk);
+                                    });
 
-        // Advance to the next batch                
+
+        // Advance to the next batch     
         start = end;
     }
 
@@ -218,6 +239,14 @@ fn main() -> std::io::Result<()>
                         .num_threads(args.threads)
                         .build_global()
                         .unwrap_or_else(|e| panic!("Failed to initialize global threadpool. Error: {}", e));
+    // Loading dataset
+    let vecf = Vecf::open(&args.data_path)?;
+    let n_vectors = vecf.n_vectors as usize;
+    let dim = vecf.dim as usize;
+    let data = vecf.data();
+    println!("Loaded dataset has {n_vectors} points in {dim} dimensions.");
+
+    // 
 
     Ok(())
 }
