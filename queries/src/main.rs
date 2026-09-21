@@ -1,6 +1,6 @@
 mod query;
 
-use std::{collections::BinaryHeap, path::{Path, PathBuf}};
+use std::{collections::BinaryHeap, io::{BufWriter, Write}, path::{Path, PathBuf}};
 
 use clap::{Parser, ValueEnum};
 use rayon::prelude::*;
@@ -145,8 +145,32 @@ fn ground_truths_l2()
     todo!();
 }
 
+fn write_ground_truths(
+    path: &Path, 
+    gt_indices: &[u32], 
+    gt_dists: &[f32], 
+    n_queries: usize, 
+    k: usize,
+) -> std::io::Result<()> {
+    // Initialize file writing
+    let result_file = std::fs::File::create(path)?;
+    let mut writer = BufWriter::with_capacity(WRITE_BUFFER_SIZE, result_file);
 
-fn main() {
+    // Write results
+    writer.write_all("query_id,neighbor_rank,neighbor_id,distance\n".as_bytes())?;
+    for query in 0..n_queries {
+        for rank in 0..k {
+            let q_idx = query*k + rank;
+            writeln!(writer, "{},{},{},{:.6}", query, rank+1, gt_indices[q_idx], gt_dists[q_idx])?;
+        }
+    }
+    writer.flush()?;
+    
+    Ok(())
+}
+
+fn main() -> std::io::Result<()> 
+{
     // Parsing CLI
     let mut args = Args::parse();
 
@@ -160,4 +184,5 @@ fn main() {
                         .build_global()
                         .unwrap_or_else(|e| panic!("Failed to initialize global threadpool. Error: {}", e));
 
+    Ok(())
 }
