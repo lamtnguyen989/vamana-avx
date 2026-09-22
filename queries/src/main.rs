@@ -14,6 +14,7 @@ use crate::{query_item::{QueryItem, SortQueryItemsExt}, vecf::{Vecf, WRITE_BUFFE
 
 #[derive(Copy, Clone, Debug, ValueEnum)]
 enum Metric {
+    L1,
     L2,
     Cosine,
 }
@@ -124,6 +125,78 @@ fn generate_queries(
                             });
                         })
                         .collect();
+}
+
+/// Computing L1 nearest neighbors with respect to a single query
+fn knn_l1(
+    query: &[f32], 
+    data: &[f32], 
+    n_vectors: usize, 
+    dim: usize, 
+    k: usize,
+    idx_out: &mut [u32],
+    dists_out: &mut [f32],
+){
+    let mut heap: BinaryHeap<QueryItem> = BinaryHeap::with_capacity(k+1);
+
+    for i in 0..n_vectors {
+        // Computing L2 distance from query vector to the data vector
+        let data_vector = &data[i*dim..(i+1)*dim];
+        let mut dist = 0.0_f32;
+        for j in 0..dim {
+            dist += (data_vector[j] - query[j]).abs();
+        }
+
+        // Push Item onto the max-binary heap
+        if heap.len() < k {
+            heap.push(QueryItem { dist: dist, id: i as u32 });
+        }
+        else {
+            if let Some(worst) = heap.peek() {
+                if dist < worst.dist {
+                    heap.pop();
+                    heap.push(QueryItem { dist: dist, id: i as u32 });
+                }
+            }
+        }
+    }
+    heap.sort_query_into(idx_out, dists_out);
+}
+
+/// Computing ground truths with respect to L1-metric
+fn ground_truths_l1(
+    data: &[f32],
+    n_vectors: usize,
+    dim: usize,
+    queries: &[f32],
+    n_queries: usize,
+    k: usize,
+    batch_size: usize,
+) -> (Vec<u32>, Vec<f32>) {
+    // Initialize ground truths beffer
+    let mut gt_indices = vec![0_u32; n_queries * k];
+    let mut gt_distances = vec![0.0_f32; n_queries * k];
+
+    let mut start = 0_usize;
+    while start < n_queries {
+        // Setting batch work boundary
+        let end = (start + batch_size).min(n_queries);
+
+        // Computing ground truths from queries concurrently from the batch
+        gt_indices[start*k..end*k].par_chunks_mut(k)
+                                    .zip(gt_distances[start*k..end*k].par_chunks_mut(k))
+                                    .zip((start..end).into_par_iter())
+                                    .for_each(|((id_chunk, d_chunk), q)| {
+                                        let query = &queries[q*dim..(q+1)*dim];
+                                        knn_l1(query, data, n_vectors, dim, k, id_chunk, d_chunk);
+                                    });
+
+
+        // Advance to the next batch     
+        start = end;
+    }
+
+    return (gt_indices, gt_distances);
 }
 
 /// Computing L2 nearest neighbors with respect to a single query
@@ -260,6 +333,7 @@ fn main() -> std::io::Result<()>
     let (gt_indices, gt_dists) = match args.metric {
         Metric::L2 => {ground_truths_l2(data, n_vectors, dim, &queries, args.n_queries, args.neighbors_count, args.batch_size)}
         Metric::Cosine => {todo!("Cosine metric has not been implemented yet!")}
+        Metric::L1 => {ground_truths_l1(data, n_vectors, dim, &queries, args.n_queries, args.neighbors_count, args.batch_size)}
     };
 
     // Serialize ground truths to CSV
