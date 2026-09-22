@@ -17,6 +17,7 @@ typedef float (*dist_fn_t)(const float *a, const float *b, uint32_t dim);
 // Metric declerations
 // -------------------------------------------------------------------------------- //
 static inline float l2_dist(const float* a, const float* b, uint32_t dim);
+static inline float l1_dist(const float* a, const float* b, uint32_t dim);
 static inline float cosine_dist(const float* a, const float* b, uint32_t dim);
 
 
@@ -27,6 +28,8 @@ static inline dist_fn_t metric()
 {
     #if defined (L2_IMPLEMENTATION)
         return l2_dist;
+    #elif defined (L1_IMPLEMENTATION)
+        return l1_dist;
     #elif defined (COSINE_IMPLEMENTATION)
         return cosine_dist;
     #else
@@ -47,6 +50,29 @@ static inline float horizontal_sum_reduce_avx256(__m256 v)
     sum128 = _mm_hadd_ps(sum128, sum128);
     sum128 = _mm_hadd_ps(sum128, sum128);
     return _mm_cvtss_f32(sum128);
+}
+
+// -------------------------------------------------------------------------------- //
+// L1 metric implementations
+// -------------------------------------------------------------------------------- //
+static inline float l1_scalar(const float* a, const float* b, uint32_t dim);
+static inline float l1_avx512(const float* a, const float* b, uint32_t dim);
+static inline float l1_avx256(const float* a, const float* b, uint32_t dim);
+
+static inline float l1_dist(const float* a, const float* b, uint32_t dim)
+{
+    return l1_scalar(a, b, dim);
+}
+
+static inline float l1_scalar(const float* a, const float* b, uint32_t dim)
+{
+    #if defined(DEBUG)
+        printf("Calculating L2 serially...\n");
+    #endif
+
+    float result = 0.0f;
+    for (uint32_t k = 0; k < dim; k++) {result += fabsf(a[k] - b[k]);}
+    return result;
 }
 
 // -------------------------------------------------------------------------------- //
