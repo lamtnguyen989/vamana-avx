@@ -7,7 +7,7 @@ pub const WRITE_BUFFER_SIZE: usize = 16 * 1024 * 1024;
 
 /// Mmap'd .vecf file representation
 pub struct Vecf {
-    pub mmap: Mmap,
+    mmap: Mmap,
     pub n_vectors: u32,
     pub dim: u32,
 }
@@ -44,7 +44,7 @@ impl Vecf
 
     }
 
-    /// Viewing vectors data from file
+    /// Viewing actual vectors data contents from file
     pub fn data(&self) -> &[f32] {
         // Getting the pointer to the contents
         let data = &self.mmap[HEADER_BYTES..];
