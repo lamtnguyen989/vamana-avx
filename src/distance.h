@@ -61,7 +61,74 @@ static inline float l1_avx256(const float* a, const float* b, uint32_t dim);
 
 static inline float l1_dist(const float* a, const float* b, uint32_t dim)
 {
-    return l1_scalar(a, b, dim);
+    #if defined (__AVX512F__)
+        return l1_avx512(a, b, dim);
+    #elif defined (__AVX2__) && defined (__FMA__)
+        return l1_avx256(a, b, dim);
+    #else 
+        return l1_scalar(a, b, dim);
+    #endif
+}
+
+static inline float l1_avx512(const float* a, const float* b, uint32_t dim)
+{
+    #if defined(DEBUG)
+        printf("Calculating L1 with AVX-512...\n");
+    #endif
+
+    __m512 accumulator = _mm512_setzero_ps();
+    
+    // Note 512-bits is 16 floats so jump by that amount
+    uint32_t k = 0;
+    for (; k + 16 <= dim; k += 16) {
+        // Load data into 512-bit wide registers
+        __m512 va = _mm512_loadu_ps(a + k);
+        __m512 vb = _mm512_loadu_ps(b + k);
+
+        // Accumulate the (vectorized) difference
+        __m512 diff = _mm512_sub_ps(va, vb);
+        __m512 abs_diff = _mm512_abs_ps(diff);
+        accumulator = _mm512_add_ps(accumulator, abs_diff); /* acc += |a_k - b_k| */
+    }
+
+    // Reduce the result
+    float result = _mm512_reduce_add_ps(accumulator);
+
+    // Accumulate tail-elements contribution
+    for (; k < dim; k++) {result += fabsf(a[k] - b[k]);}
+
+    return result;
+}
+
+static inline float l1_avx256(const float* a, const float* b, uint32_t dim)
+{
+    #if defined(DEBUG)
+        printf("Calculating L2 with AVX-256...\n");
+    #endif
+
+    __m256 accumulator = _mm256_setzero_ps();
+    __m256 sign_mask = _mm256_set1_ps(-0.0f);   // Needed since AVX-256 needs to manually clear the sign bits
+
+    // Accumulate results via 8 floats (256-bits) chunks
+    uint32_t k = 0;
+    for (; k + 8 <= dim; k+= 8) {
+        // Load data into 256-bit wide registers
+        __m256 va = _mm256_loadu_ps(a + k);
+        __m256 vb = _mm256_loadu_ps(b + k);
+
+        // Accumulate the (vectorized) absolute difference
+        __m256 diff = _mm256_sub_ps(va, vb);
+        __m256 abs_diff = _mm256_andnot_ps(sign_mask, diff);   // Clearing the sign bits
+        accumulator = _mm256_add_ps(accumulator, abs_diff); /* acc += |a_k - b_k| */
+    }
+
+    // Reduction 
+    float result = horizontal_sum_reduce_avx256(accumulator);
+
+    // Accumulate tail-elements contribution
+    for (; k < dim; k++) {result += square(a[k] - b[k]);}
+
+    return result;
 }
 
 static inline float l1_scalar(const float* a, const float* b, uint32_t dim)
