@@ -18,6 +18,8 @@ SHELL := /bin/bash
 
 .ONESHELL:
 
+.PHONY: setup
+
 # Disgusting bolted-on way to setup spack environment (globally)
 define SETUP_SPACK
 	source $(SPACK_ROOT)/share/spack/setup-env.sh
@@ -34,6 +36,9 @@ define SETUP_SPACK
 	spack env activate $(SPACK_ENV_NAME)
 	spack install
 endef
+
+setup:
+	$(SETUP_SPACK)
 
 # Training PQ codebook binary
 train: $(SRC_DIR)/train_pq.c

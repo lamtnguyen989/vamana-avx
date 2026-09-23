@@ -5,6 +5,7 @@ SPACK_ENV=${2:-"vamana-avx"}
 
 # Setting up Spack environments
 source "$SPACK_ROOT"/share/spack/setup-env.sh
+make setup
 spack env activate "$SPACK_ENV"
 
 # Create high dimensional dataset and serialize to `.vecf` format (along with the shardings)
