@@ -38,7 +38,7 @@ static void kmeans_init(
     size_t first_centroid_idx = (size_t)(random_uniform() * n_points);
     memcpy(&centroids[0], &data[first_centroid_idx * dim], dim * sizeof(float));
 
-    // Selecting the remainderaining centroids
+    // Selecting the remaining centroids
     for (size_t c = 1; c < K; c++) {
         // For each point, compute squared distance to nearest selected centroid and parallel reduce the total nearest distance
         const float *latest_centroid = &centroids[(c-1) * dim];
@@ -75,7 +75,7 @@ static void kmeans_init(
     free(min_dist_sq);
 }
 
-// Lloyd KMeans algorithm for one subspace 
+// Lloyd K-Means algorithm for one subspace 
 static inline void kmeans_lloyd(
     const float *data, 
     uint32_t n_points, 
@@ -172,6 +172,20 @@ static inline void kmeans_lloyd(
     free(assignments);
     free(cluster_sums);
     free(cluster_size);
+}
+
+// Lloyd K-Medians algorithm for one subspace (to be used for L1 metric)
+static inline void kmeadians_lloyd(
+    const float *data, 
+    uint32_t n_points, 
+    uint32_t dim,                      
+    uint32_t K, 
+    dist_fn_t dist_fn, 
+    float* centroids, 
+    uint32_t iterations,
+    float tolerance)
+{
+    // TODO
 }
 
 int main(int argc, char** argv)
