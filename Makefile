@@ -7,7 +7,7 @@ MPICC := mpicc
 
 DEBUG_FLAGS = -DDEBUG -g -fsanitize=address
 
-METRIC_IMPL ?= -DL1_IMPLEMENTATION
+METRIC_IMPL ?= -DL2_IMPLEMENTATION
 
 # Spack information
 # How likely is it that people use this name for one of their spack env name?
