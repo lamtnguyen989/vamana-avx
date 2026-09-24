@@ -38,7 +38,7 @@ static void kmeans_init(
     size_t first_centroid_idx = (size_t)(random_uniform() * n_points);
     memcpy(&centroids[0], &data[first_centroid_idx * dim], dim * sizeof(float));
 
-    // Selecting the remainderaining centroids
+    // Selecting the remaining centroids
     for (size_t c = 1; c < K; c++) {
         // For each point, compute squared distance to nearest selected centroid and parallel reduce the total nearest distance
         const float *latest_centroid = &centroids[(c-1) * dim];
@@ -75,7 +75,7 @@ static void kmeans_init(
     free(min_dist_sq);
 }
 
-// Lloyd KMeans algorithm for one subspace 
+// Lloyd K-Means algorithm for one subspace 
 static inline void kmeans_lloyd(
     const float *data, 
     uint32_t n_points, 
@@ -172,6 +172,137 @@ static inline void kmeans_lloyd(
     free(assignments);
     free(cluster_sums);
     free(cluster_size);
+}
+
+// Lloyd K-Medians algorithm for one subspace (to be used for L1 metric)
+static inline void kmedians_lloyd(
+    const float *data, 
+    uint32_t n_points, 
+    uint32_t dim,                      
+    uint32_t K, 
+    dist_fn_t dist_fn, 
+    float* centroids, 
+    uint32_t iterations,
+    float tolerance)
+{
+    // Creating buffers
+    uint32_t* assignments = (uint32_t*) malloc(n_points*sizeof(uint32_t));
+    uint32_t* cluster_size = (uint32_t*) malloc(K*dim*sizeof(uint32_t));
+    uint32_t* cluster_start = (uint32_t*) malloc((K+1)*sizeof(uint32_t));
+
+    // Bucket sort buffers (grouping points by cluster for cache-efficiency)
+    uint32_t* fill_pos = (uint32_t*) malloc(K*sizeof(uint32_t));
+    uint32_t* sorted_idx = (uint32_t*) malloc(n_points*sizeof(uint32_t));
+
+    // Running through the iteration trainings
+    for (uint32_t iter = 0; iter < iterations; iter++) {
+        /* Cluster assignment (parallelized) */
+        // Finding closest centroid for every point in the dataset
+        #pragma omp parallel for schedule(dynamic, 256)
+        for (uint32_t i = 0; i < n_points; i++) {
+            float closest_dist = FLT_MAX;
+            uint32_t closest_idx = 0;
+
+            const float* point = &data[(size_t)i * dim];
+            for (uint32_t k = 0; k < K; k++) {
+                const float* curr_centroid = &centroids[(size_t)k * dim];
+                float d = dist_fn(point, curr_centroid, dim);
+
+                if (d < closest_dist) {
+                    closest_dist = d;
+                    closest_idx = k;
+                }
+            }
+
+            assignments[i] = closest_idx;
+        }
+
+        /* Bucket sort point indices by cluster */
+        memset(cluster_size, 0, K*sizeof(uint32_t));
+        for (uint32_t p = 0; p < n_points; p++) {cluster_size[assignments[p]]++;}
+
+        cluster_start[0] = 0;
+        for (uint32_t k = 0; k < K; k ++) {cluster_start[k+1] = (cluster_start[k] + cluster_size[k]);}
+
+        memcpy(fill_pos, cluster_start, K*sizeof(uint32_t));
+        for (uint32_t p = 0; p < n_points; p++) {sorted_idx[fill_pos[assignments[p]]++] = p;}
+
+        /* Median update step (parallelized across clusters) */
+        float max_shift = 0.0f;
+        #pragma omp parallel
+        {
+            float local_max_shift = 0.0f;
+            float* value_buf = (float*) malloc(n_points * sizeof(float));   // Per-thread scratch to gather one dimension's values
+            
+            #pragma omp for schedule(dynamic)
+            for (uint32_t k = 0; k < K; k++) {
+                // Size check
+                uint32_t count = cluster_size[k];
+                if (count == 0) { 
+                    continue;
+                }
+
+                float* centroid = &centroids[(size_t)k * dim];
+                const uint32_t* members = &sorted_idx[cluster_start[k]];
+                for (uint32_t d = 0; d < dim; d++) {
+                    // Gather dimension's values across cluster's members
+                    for (uint32_t j = 0; j < count; j++) {value_buf[j] = data[(size_t)members[j]*dim + d];}
+
+                    // Coordinate-wise median
+                    qsort(value_buf, count, sizeof(float), compare_float);
+                    float new_median = (count % 2 == 1) ? value_buf[count/2] 
+                                                        : 0.5f*(value_buf[count/2 - 1] + value_buf[count/2]);
+
+                    // Calculate the shift of the new cluster median
+                    float shift = fabsf(new_median - centroid[d]);
+                    if (shift > local_max_shift) {
+                        local_max_shift = shift;
+                    }
+
+                    // Update the centroid
+                    centroid[d] = new_median;
+                }
+            }
+
+            free(value_buf);
+
+            #pragma omp critical
+            {
+                if (local_max_shift > max_shift) {
+                    max_shift = local_max_shift;
+                }
+            }
+        }
+
+        // Early stopping if no centroid move more than tolerance
+        if (tolerance > 0.0f && max_shift < tolerance) {
+            break;
+        }
+    }
+
+    // Cleanups
+    free(assignments);
+    free(cluster_start);
+    free(cluster_size);
+    free(fill_pos);
+    free(sorted_idx);
+}
+
+static inline void kclustering_lloyd(
+    const float *data, 
+    uint32_t n_points, 
+    uint32_t dim,                      
+    uint32_t K, 
+    dist_fn_t dist_fn, 
+    float* centroids, 
+    uint32_t iterations,
+    float tolerance)
+{
+    #if defined (L1_IMPLEMENTATION)
+        kmedians_lloyd(data, n_points, dim, K, dist_fn, centroids, iterations, tolerance);
+    #else 
+        kmeans_lloyd(data, n_points, dim, K, dist_fn, centroids, iterations, tolerance);
+    #endif
 }
 
 int main(int argc, char** argv)
@@ -314,7 +445,7 @@ int main(int argc, char** argv)
         }
         float *centroids_m = &local_centroids[(size_t)local_m * K * subspace_dim];
         kmeans_init(subspace_data, n_vectors, subspace_dim, K, dist_fn, centroids_m);
-        kmeans_lloyd(subspace_data, n_vectors, subspace_dim, K, dist_fn, centroids_m, iters, epsilon);
+        kclustering_lloyd(subspace_data, n_vectors, subspace_dim, K, dist_fn, centroids_m, iters, epsilon);
         printf("Rank %d: subspace %lu done (%lds elapsed)\n", rank, m, time(NULL) - t0);
     }
     

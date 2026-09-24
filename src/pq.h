@@ -14,7 +14,15 @@
 
 #include "distance.h"
 
-#define PQ_MAGIC 0x50513031u /* ASCII code for "PQ01" */
+/* PQ ADC table entry based on metric implementation */
+#if defined(L1_IMPLEMENTATION)
+    #define PQ_ADC_TABLE_ENTRY(d) (d)
+#else 
+    #define PQ_ADC_TABLE_ENTRY(d) square(d)
+#endif
+
+/* PQ Codebook magic bytes */
+#define PQ_MAGIC 0x50513031u    // ASCII code for "PQ01"
 
 /* Product Quantization codebook */
 // This will be serialized to `.pqbook` for storing data
@@ -60,7 +68,7 @@ static inline void pq_build_distance_table(const PQCodebook* pq, dist_fn_t dista
         const float* query_sub_vec = &query[(size_t)m * pq->sub_dim];
         for (uint32_t k = 0; k < pq->K; k++) {
             float d = distance(query_sub_vec, pq_get_centroid(pq, m, k), pq->sub_dim);
-            table[(size_t)m * pq->K + k] = square(d);
+            table[(size_t)m * pq->K + k] = PQ_ADC_TABLE_ENTRY(d);
         }
     }
 }
@@ -257,6 +265,14 @@ static inline uint8_t* pq_codes_at(const PQCodes* pq_codes, uint32_t point_id)
     return &pq_codes->data[(size_t)point_id*pq_codes->M];
 }
 
+
+// Compare float helper
+static inline int compare_float(const void* a, const void* b)
+{
+    float fa = *(const float*)a;
+    float fb = *(const float*)b;
+    return (fa > fb) - (fa < fb);
+}
 
 
 #endif /* PQ_H */
