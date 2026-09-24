@@ -266,5 +266,13 @@ static inline uint8_t* pq_codes_at(const PQCodes* pq_codes, uint32_t point_id)
 }
 
 
+// Compare float helper
+static inline int compare_float(const void* a, const void* b)
+{
+    float fa = *(const float*)a;
+    float fb = *(const float*)b;
+    return (fa > fb) - (fa < fb);
+}
+
 
 #endif /* PQ_H */
