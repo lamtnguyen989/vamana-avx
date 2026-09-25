@@ -6,6 +6,7 @@ BUILD_DIR = build
 MPICC := mpicc
 
 DEBUG_FLAGS = -DDEBUG -g -fsanitize=address
+PROFILING_FLAGS = -DPROFILING
 
 METRIC_IMPL ?= -DL2_IMPLEMENTATION
 
@@ -56,7 +57,7 @@ search: $(SRC_DIR)/search_pq.c
 vamana: $(SRC_DIR)/vamana_pq.c
 	$(SETUP_SPACK)
 	mkdir -p $(BUILD_DIR)
-	$(MPICC) $(CFLAGS) $< -o $(BUILD_DIR)/$@ $(LINK_FLAG) $(METRIC_IMPL)	
+	$(MPICC) $(CFLAGS) $(PROFILING_FLAGS) $< -o $(BUILD_DIR)/$@ $(LINK_FLAG) $(METRIC_IMPL)	
 
 clean:
 	rm -rf $(BUILD_DIR)

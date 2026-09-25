@@ -218,7 +218,6 @@ static void build_shard_vamana_index(VecFile* vf, const ShardJobConfig* cfg, con
     shuffle(shuffle_order, vf->num_vectors, cfg->seed_opt);
 
     /* Building index */
-    time_t t0 = time(NULL);
     #pragma omp parallel num_threads(cfg->n_threads)
     {
         uint32_t* out_ids = (uint32_t*) malloc(R * sizeof(uint32_t));
@@ -276,7 +275,6 @@ static void build_shard_vamana_index(VecFile* vf, const ShardJobConfig* cfg, con
         free(scratch);
         free(out_ids);
     }
-    printf("Done with building index, took %lds. Now serializing...\n", time(NULL) - t0);
 
     // Cleanup locks before serializing since everything is serial from here
     for (uint32_t k = 0; k < vf->num_vectors; k++) { omp_destroy_lock(&locks[k]); }
@@ -386,6 +384,12 @@ int main(int argc, char** argv)
     int rank, world_size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+
+    /* Start timings */
+    #if defined (PROFILING)
+        MPI_Barrier(MPI_COMM_WORLD);
+        double start_time = MPI_Wtime();
+    #endif
 
     /* CLI parsing */
     if (argc < 6) {
@@ -502,6 +506,20 @@ int main(int argc, char** argv)
     /* Cleanups */
     pq_codebook_free(&pq);
     close(data_fd);
+
+    /* End timings */
+    #if defined (PROFILING)
+        double end_time = MPI_Wtime();
+        double rank_elapsed_time = end_time - start_time;
+        printf("Rank %d: Took %.2f for encoding its shards and building Vamana graph indexes.\n", rank, rank_elapsed_time);
+
+        double global_elapsed_time;
+        MPI_Reduce(&rank_elapsed_time, &global_elapsed_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD); // Reduce the global wall time
+        if (rank == 0) {
+            printf("\nEncodings and Vamana Graph indexing took %.2fs in total (including cleanups).\n", global_elapsed_time);
+        }
+    #endif
+
     MPI_Finalize();
     return 0;
 }
